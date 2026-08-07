@@ -1,8 +1,22 @@
 from cyberagent.models import ChallengeState
+from cyberagent.tools import ToolResult, record_tool_output
 
 
 def web_agent(state: ChallengeState) -> ChallengeState:
-    return _run_specialist(state, "web_agent", "Web Agent")
+    state = _run_specialist(state, "web_agent", "Web Agent")
+    if "web_agent" not in state.get("active_agents", []):
+        return state
+
+    target = _first_remote_target(state)
+    result: ToolResult = {
+        "tool": "web_probe",
+        "ok": bool(target),
+        "output": f"Detected HTTP target: {target}" if target else "No HTTP target found.",
+        "error": None if target else "missing remote target",
+        "exit_code": 0 if target else 1,
+        "metadata": {"target": target},
+    }
+    return record_tool_output(state, result, caller="web_agent")
 
 
 def pwn_agent(state: ChallengeState) -> ChallengeState:
@@ -51,3 +65,10 @@ def _run_specialist(
         **state,
         "findings": [*state.get("findings", []), finding],
     }
+
+
+def _first_remote_target(state: ChallengeState) -> str:
+    for target in state.get("remote_targets", []):
+        if isinstance(target, str) and target.strip():
+            return target.strip()
+    return ""

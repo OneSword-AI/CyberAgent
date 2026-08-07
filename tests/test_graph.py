@@ -28,3 +28,6 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert result["next_agents"] == ["web_agent"]
     assert result["active_agents"] == ["web_agent"]
     assert result["findings"][-1]["agent"] == "web_agent"
+    assert result["tool_outputs"][-1]["caller"] == "web_agent"
+    assert result["tool_outputs"][-1]["tool"] == "web_probe"
+    assert result["tool_outputs"][-1]["ok"] is True
