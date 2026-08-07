@@ -1,16 +1,5 @@
+from cyberagent.agents.constants import CATEGORY_TO_AGENT, KNOWN_AGENT_NAMES
 from cyberagent.models import ChallengeState
-
-
-CATEGORY_TO_AGENT = {
-    "Web": "web_agent",
-    "Pwn": "pwn_agent",
-    "Reverse": "reverse_agent",
-    "Crypto": "crypto_agent",
-    "Misc": "misc_agent",
-    "Forensics": "forensics_agent",
-    "Other": "other_agent",
-}
-KNOWN_AGENT_NAMES = set(CATEGORY_TO_AGENT.values())
 
 
 def route_agent(state: ChallengeState) -> ChallengeState:
@@ -46,12 +35,13 @@ def _select_agents(state: ChallengeState) -> list[str]:
 
 
 def _valid_agent_names(values: list[str]) -> list[str]:
+    known_agent_names = set(KNOWN_AGENT_NAMES)
     agents: list[str] = []
     for value in values:
         if not isinstance(value, str):
             continue
         value = value.strip()
-        if value in KNOWN_AGENT_NAMES:
+        if value in known_agent_names:
             agents.append(value)
 
     return list(dict.fromkeys(agents))

@@ -2,21 +2,15 @@ import json
 import re
 from typing import Any, TypedDict
 
-from cyberagent.agents.classifier import KNOWN_CATEGORIES, classify_challenge
+from cyberagent.agents.classifier import classify_challenge
+from cyberagent.agents.constants import (
+    CATEGORY_TO_AGENT,
+    KNOWN_AGENT_NAMES,
+    KNOWN_CATEGORIES,
+    KNOWN_COMPLEXITIES,
+)
 from cyberagent.llm import get_llm
 from cyberagent.models import ChallengeState
-
-
-KNOWN_AGENTS = {
-    "Web": "web_agent",
-    "Pwn": "pwn_agent",
-    "Reverse": "reverse_agent",
-    "Crypto": "crypto_agent",
-    "Misc": "misc_agent",
-    "Forensics": "forensics_agent",
-    "Other": "other_agent",
-}
-KNOWN_COMPLEXITIES = ("simple", "medium", "complex")
 
 
 class ClassificationResult(TypedDict):
@@ -69,7 +63,7 @@ def build_classification_prompt(state: ChallengeState) -> str:
 {", ".join(KNOWN_COMPLEXITIES)}
 
 优先使用的 next_agents 是：
-{", ".join(KNOWN_AGENTS.values())}
+{", ".join(KNOWN_AGENT_NAMES)}
 
 题目标题：
 {state.get("title", "")}
@@ -123,13 +117,13 @@ def validate_classification_result(data: dict[str, Any]) -> ClassificationResult
     next_agents = _validated_str_list(
         data,
         "next_agents",
-        allowed=set(KNOWN_AGENTS.values()),
+        allowed=set(KNOWN_AGENT_NAMES),
         unknown_value="other_agent",
         required=False,
     )
 
     if not next_agents:
-        next_agents = [KNOWN_AGENTS[category] for category in categories]
+        next_agents = [CATEGORY_TO_AGENT[category] for category in categories]
 
     reasoning_summary = _validated_str(data, "reasoning_summary", default="")
     if not reasoning_summary:
@@ -146,7 +140,11 @@ def validate_classification_result(data: dict[str, Any]) -> ClassificationResult
 def fallback_classify(state: ChallengeState, error: Exception) -> ChallengeState:
     fallback_state = classify_challenge(state)
     categories = fallback_state.get("predicted_categories", [])
-    next_agents = [KNOWN_AGENTS[category] for category in categories if category in KNOWN_AGENTS]
+    next_agents = [
+        CATEGORY_TO_AGENT[category]
+        for category in categories
+        if category in CATEGORY_TO_AGENT
+    ]
 
     finding = {
         "agent": "llm_classifier",

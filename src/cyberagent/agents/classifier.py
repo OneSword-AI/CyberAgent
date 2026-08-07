@@ -1,7 +1,5 @@
+from cyberagent.agents.constants import KNOWN_CATEGORIES
 from cyberagent.models import ChallengeState
-
-
-KNOWN_CATEGORIES = ("Web", "Pwn", "Reverse", "Crypto", "Misc", "Forensics", "Other")
 
 
 def classify_challenge(state: ChallengeState) -> ChallengeState:
