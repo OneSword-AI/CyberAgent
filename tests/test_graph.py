@@ -8,7 +8,7 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
         return {
             "tool": "http_get",
             "ok": True,
-            "output": "ok",
+            "output": "ok flag{from_web}",
             "error": None,
             "exit_code": 0,
             "metadata": {"url": url},
@@ -38,7 +38,10 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert result["predicted_categories"] == ["Web"]
     assert result["next_agents"] == ["web_agent"]
     assert result["active_agents"] == ["web_agent"]
-    assert result["findings"][-1]["agent"] == "web_agent"
+    finding_agents = [finding["agent"] for finding in result["findings"]]
+    assert "web_agent" in finding_agents
+    assert "flag_extractor" in finding_agents
     assert result["tool_outputs"][-1]["caller"] == "web_agent"
     assert result["tool_outputs"][-1]["tool"] == "http_get"
     assert result["tool_outputs"][-1]["ok"] is True
+    assert result["candidate_flags"] == ["flag{from_web}"]

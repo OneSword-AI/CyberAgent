@@ -1,5 +1,6 @@
 from langgraph.graph import END, StateGraph
 
+from cyberagent.agents.flag_extractor import extract_candidate_flags
 from cyberagent.agents.llm_classifier import llm_classify_challenge
 from cyberagent.agents.router import route_agent
 from cyberagent.agents.specialists import (
@@ -28,6 +29,7 @@ def build_graph():
     graph.add_node("misc_agent", misc_agent)
     graph.add_node("forensics_agent", forensics_agent)
     graph.add_node("other_agent", other_agent)
+    graph.add_node("extract_candidate_flags", extract_candidate_flags)
 
     graph.set_entry_point("fetch_challenge")
     graph.add_edge("fetch_challenge", "classify_challenge")
@@ -39,7 +41,8 @@ def build_graph():
     graph.add_edge("crypto_agent", "misc_agent")
     graph.add_edge("misc_agent", "forensics_agent")
     graph.add_edge("forensics_agent", "other_agent")
-    graph.add_edge("other_agent", END)
+    graph.add_edge("other_agent", "extract_candidate_flags")
+    graph.add_edge("extract_candidate_flags", END)
 
     return graph.compile()
 
