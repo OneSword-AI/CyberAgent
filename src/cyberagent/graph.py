@@ -24,6 +24,7 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "attachments": [],
         "remote_targets": [],
         "predicted_categories": [],
+        "next_agents": [],
         "candidate_flags": [],
         "findings": [],
         "failed_attempts": [],
