@@ -9,7 +9,7 @@ from cyberagent.agents.evidence_gate import run_evidence_gate
 from cyberagent.agents.flag_extractor import extract_candidate_flags
 from cyberagent.agents.flag_verifier import verify_flag
 from cyberagent.agents.foundation_node import run_foundation_agents
-from cyberagent.agents.llm_classifier import llm_classify_challenge
+from cyberagent.agents.controller import run_controller_agent
 from cyberagent.agents.registry import SPECIALIST_NODES, SPECIALIST_ORDER
 from cyberagent.agents.retry import retry_agent
 from cyberagent.agents.router import route_agent
@@ -23,7 +23,7 @@ def build_graph():
     graph.add_node("fetch_challenge", _as_delta_node(fetch_challenge))
     graph.add_node("download_attachments", _as_delta_node(download_attachments))
     graph.add_node("foundation_agents", _as_delta_node(run_foundation_agents))
-    graph.add_node("classify_challenge", _as_delta_node(llm_classify_challenge))
+    graph.add_node("controller_agent", _as_delta_node(run_controller_agent))
     graph.add_node("route_agent", _as_delta_node(route_agent))
     for agent_name, agent_node in SPECIALIST_NODES.items():
         graph.add_node(agent_name, _as_delta_node(agent_node))
@@ -35,8 +35,8 @@ def build_graph():
     graph.set_entry_point("fetch_challenge")
     graph.add_edge("fetch_challenge", "download_attachments")
     graph.add_edge("download_attachments", "foundation_agents")
-    graph.add_edge("foundation_agents", "classify_challenge")
-    graph.add_edge("classify_challenge", "route_agent")
+    graph.add_edge("foundation_agents", "controller_agent")
+    graph.add_edge("controller_agent", "route_agent")
     graph.add_conditional_edges("route_agent", _specialist_routes)
     for agent_name in SPECIALIST_ORDER:
         graph.add_edge(agent_name, "extract_candidate_flags")
@@ -58,7 +58,7 @@ def build_graph():
             "end": END,
         },
     )
-    graph.add_edge("retry_agent", "route_agent")
+    graph.add_edge("retry_agent", "controller_agent")
 
     return graph.compile()
 
@@ -72,6 +72,10 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "predicted_categories": [],
         "next_agents": [],
         "active_agents": [],
+        "plan": "",
+        "plan_rationale": "",
+        "controller_decisions": {},
+        "stop_condition": "",
         "candidate_flags": [],
         "findings": [],
         "verification_results": [],

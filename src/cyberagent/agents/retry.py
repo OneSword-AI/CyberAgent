@@ -10,6 +10,8 @@ def retry_agent(state: ChallengeState) -> ChallengeState:
         "retry": retry_count,
         "candidate_flags": state.get("candidate_flags", []),
         "verification_results": state.get("verification_results", []),
+        "plan": state.get("plan", ""),
+        "active_agents": state.get("active_agents", []),
         "reason": "no valid flag accepted",
     }
     next_state: ChallengeState = {

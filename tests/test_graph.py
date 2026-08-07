@@ -111,6 +111,9 @@ def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
     assert result["failed_attempts"][-1]["reason"] == "no valid flag accepted"
     trace_events = [event["event"] for event in result["trace"]]
     assert trace_events.count("retry.schedule") == 1
+    assert trace_events.count("llm.fallback") == 2
+    assert result["failed_attempts"][-1]["plan"]
+    assert result["failed_attempts"][-1]["active_agents"] == ["web_agent"]
 
 
 def test_graph_dispatches_multiple_specialists_with_send(tmp_path, monkeypatch):
