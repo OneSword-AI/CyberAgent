@@ -9,6 +9,7 @@ from cyberagent.agents.constants import (
     KNOWN_CATEGORIES,
     KNOWN_COMPLEXITIES,
 )
+from cyberagent.evidence import add_finding
 from cyberagent.llm import get_llm
 from cyberagent.models import ChallengeState
 
@@ -29,24 +30,23 @@ def llm_classify_challenge(state: ChallengeState) -> ChallengeState:
     except Exception as exc:
         return fallback_classify(state, exc)
 
-    finding = {
-        "agent": "llm_classifier",
-        "summary": result["reasoning_summary"],
-        "evidence": {
-            "predicted_categories": result["predicted_categories"],
-            "complexity": result["complexity"],
-            "next_agents": result["next_agents"],
-        },
-    }
-
-    return {
+    next_state: ChallengeState = {
         **state,
         "predicted_categories": result["predicted_categories"],
         "complexity": result["complexity"],
         "reasoning_summary": result["reasoning_summary"],
         "next_agents": result["next_agents"],
-        "findings": [*state.get("findings", []), finding],
     }
+    return add_finding(
+        next_state,
+        agent="llm_classifier",
+        summary=result["reasoning_summary"],
+        evidence={
+            "predicted_categories": result["predicted_categories"],
+            "complexity": result["complexity"],
+            "next_agents": result["next_agents"],
+        },
+    )
 
 
 def build_classification_prompt(state: ChallengeState) -> str:
@@ -146,13 +146,7 @@ def fallback_classify(state: ChallengeState, error: Exception) -> ChallengeState
         if category in CATEGORY_TO_AGENT
     ]
 
-    finding = {
-        "agent": "llm_classifier",
-        "summary": "LLM classification failed; used rule-based fallback.",
-        "error": str(error),
-    }
-
-    return {
+    next_state: ChallengeState = {
         **fallback_state,
         "complexity": fallback_state.get("complexity", "medium"),
         "reasoning_summary": fallback_state.get(
@@ -160,8 +154,13 @@ def fallback_classify(state: ChallengeState, error: Exception) -> ChallengeState
             "LLM classification failed; used rule-based fallback.",
         ),
         "next_agents": next_agents,
-        "findings": [*fallback_state.get("findings", []), finding],
     }
+    return add_finding(
+        next_state,
+        agent="llm_classifier",
+        summary="LLM classification failed; used rule-based fallback.",
+        error=str(error),
+    )
 
 
 def _strip_json_code_fence(content: str) -> str:

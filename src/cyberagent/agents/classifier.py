@@ -1,4 +1,5 @@
 from cyberagent.agents.constants import KNOWN_CATEGORIES
+from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
 
 
@@ -22,20 +23,19 @@ def classify_challenge(state: ChallengeState) -> ChallengeState:
     if not categories:
         categories = ["Other"]
 
-    finding = {
-        "agent": "classifier",
-        "summary": f"Predicted challenge category: {', '.join(categories)}",
-        "evidence": {
+    next_state: ChallengeState = {
+        **state,
+        "predicted_categories": categories,
+    }
+    return add_finding(
+        next_state,
+        agent="classifier",
+        summary=f"Predicted challenge category: {', '.join(categories)}",
+        evidence={
             "title": state.get("title", ""),
             "category_hint": state.get("category_hint"),
         },
-    }
-
-    return {
-        **state,
-        "predicted_categories": categories,
-        "findings": [*state.get("findings", []), finding],
-    }
+    )
 
 
 def _classify_from_text(text: str) -> list[str]:

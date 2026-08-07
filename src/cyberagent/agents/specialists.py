@@ -1,3 +1,4 @@
+from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
 from cyberagent.tools import ToolResult, http_get, record_tool_output
 
@@ -44,20 +45,16 @@ def _run_specialist(
     if agent_name not in state.get("active_agents", []):
         return state
 
-    finding = {
-        "agent": agent_name,
-        "summary": f"{display_name} received the challenge.",
-        "evidence": {
+    return add_finding(
+        state,
+        agent=agent_name,
+        summary=f"{display_name} received the challenge.",
+        evidence={
             "title": state.get("title", ""),
             "predicted_categories": state.get("predicted_categories", []),
             "active_agents": state.get("active_agents", []),
         },
-    }
-
-    return {
-        **state,
-        "findings": [*state.get("findings", []), finding],
-    }
+    )
 
 
 def _first_remote_target(state: ChallengeState) -> str:

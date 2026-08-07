@@ -1,4 +1,5 @@
 from cyberagent.agents.constants import CATEGORY_TO_AGENT, KNOWN_AGENT_NAMES
+from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
 
 
@@ -6,21 +7,19 @@ def route_agent(state: ChallengeState) -> ChallengeState:
     """Select the specialist agents that should handle the challenge next."""
     active_agents = _select_agents(state)
 
-    finding = {
-        "agent": "route_agent",
-        "summary": f"Scheduled agents: {', '.join(active_agents)}",
-        "evidence": {
+    return add_finding(
+        {
+            **state,
+            "active_agents": active_agents,
+        },
+        agent="route_agent",
+        summary=f"Scheduled agents: {', '.join(active_agents)}",
+        evidence={
             "predicted_categories": state.get("predicted_categories", []),
             "next_agents": state.get("next_agents", []),
             "active_agents": active_agents,
         },
-    }
-
-    return {
-        **state,
-        "active_agents": active_agents,
-        "findings": [*state.get("findings", []), finding],
-    }
+    )
 
 
 def _select_agents(state: ChallengeState) -> list[str]:
