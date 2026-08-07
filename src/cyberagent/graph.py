@@ -5,6 +5,7 @@ from cyberagent.agents.flag_extractor import extract_candidate_flags
 from cyberagent.agents.flag_verifier import verify_flag
 from cyberagent.agents.llm_classifier import llm_classify_challenge
 from cyberagent.agents.registry import SPECIALIST_NODES, SPECIALIST_ORDER
+from cyberagent.agents.retry import retry_agent
 from cyberagent.agents.router import route_agent
 from cyberagent.models import ChallengeState
 from cyberagent.providers import fetch_challenge
@@ -21,6 +22,7 @@ def build_graph():
         graph.add_node(agent_name, agent_node)
     graph.add_node("extract_candidate_flags", extract_candidate_flags)
     graph.add_node("verify_flag", verify_flag)
+    graph.add_node("retry_agent", retry_agent)
 
     graph.set_entry_point("fetch_challenge")
     graph.add_edge("fetch_challenge", "download_attachments")
@@ -31,7 +33,15 @@ def build_graph():
         graph.add_edge(current_agent, next_agent)
     graph.add_edge(SPECIALIST_ORDER[-1], "extract_candidate_flags")
     graph.add_edge("extract_candidate_flags", "verify_flag")
-    graph.add_edge("verify_flag", END)
+    graph.add_conditional_edges(
+        "verify_flag",
+        _verification_route,
+        {
+            "retry": "retry_agent",
+            "end": END,
+        },
+    )
+    graph.add_edge("retry_agent", "route_agent")
 
     return graph.compile()
 
@@ -52,4 +62,14 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "tool_outputs": [],
         "trace": [],
         "artifacts_dir": "artifacts",
+        "retry_count": 0,
+        "max_retries": 1,
     }
+
+
+def _verification_route(state: ChallengeState) -> str:
+    if state.get("final_flag"):
+        return "end"
+    if state.get("retry_count", 0) < state.get("max_retries", 1):
+        return "retry"
+    return "end"

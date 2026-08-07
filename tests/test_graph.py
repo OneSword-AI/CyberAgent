@@ -55,3 +55,46 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert "tool.output" in trace_events
     assert "flag.extract" in trace_events
     assert "flag.verify" in trace_events
+
+
+def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_http_get(url: str):
+        calls.append(url)
+        return {
+            "tool": "http_get",
+            "ok": True,
+            "output": "no flag here",
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"url": url},
+        }
+
+    challenge_dir = tmp_path / "challenges"
+    challenge_dir.mkdir()
+    (challenge_dir / "web02.json").write_text(
+        json.dumps(
+            {
+                "title": "login trail",
+                "description": "A web login page leaks SQL errors during authentication.",
+                "remote_targets": ["http://web.example.test"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("CHALLENGE_PROVIDER", "local_json")
+    monkeypatch.setenv("CHALLENGE_LOCAL_JSON_DIR", str(challenge_dir))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
+
+    result = build_graph().invoke(initial_state("web02"))
+
+    assert calls == ["http://web.example.test", "http://web.example.test"]
+    assert result["candidate_flags"] == []
+    assert "final_flag" not in result
+    assert result["retry_count"] == 1
+    assert result["failed_attempts"][-1]["reason"] == "no valid flag accepted"
+    trace_events = [event["event"] for event in result["trace"]]
+    assert trace_events.count("retry.schedule") == 1

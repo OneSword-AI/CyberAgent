@@ -19,6 +19,8 @@ class ChallengeState(TypedDict):
     failed_attempts: list[dict]
     tool_outputs: list[dict]
     trace: list[dict]
+    retry_count: int
+    max_retries: int
 
     challenge_id: NotRequired[str]
     artifacts_dir: NotRequired[str]
