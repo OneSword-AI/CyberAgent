@@ -1,7 +1,7 @@
 from cyberagent.models import ChallengeState
 
 
-KNOWN_CATEGORIES = ("Web", "Pwn", "Reverse", "Crypto", "Misc", "Forensics")
+KNOWN_CATEGORIES = ("Web", "Pwn", "Reverse", "Crypto", "Misc", "Forensics", "Other")
 
 
 def classify_challenge(state: ChallengeState) -> ChallengeState:
@@ -22,7 +22,7 @@ def classify_challenge(state: ChallengeState) -> ChallengeState:
 
     categories = _classify_from_text(text)
     if not categories:
-        categories = ["Misc"]
+        categories = ["Other"]
 
     finding = {
         "agent": "classifier",
@@ -53,7 +53,7 @@ def _classify_from_text(text: str) -> list[str]:
     max_score = max(scores.values())
     if max_score == 0:
         return []
-    return [category for category in KNOWN_CATEGORIES if scores[category] == max_score]
+    return [category for category in scores if scores[category] == max_score]
 
 
 def _count(text: str, *keywords: str) -> int:
