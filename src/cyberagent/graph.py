@@ -109,6 +109,7 @@ APPEND_FIELDS = {
     "failed_attempts",
     "tool_outputs",
     "trace",
+    "signals",
 }
 
 

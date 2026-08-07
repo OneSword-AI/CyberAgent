@@ -1,4 +1,5 @@
 from cyberagent.agents.foundation import AnalystAgent, CriticAgent, MemoryAgent, ObserverAgent
+from cyberagent.blackboard import Blackboard
 from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
 from cyberagent.signals import Signal, make_signal
@@ -6,10 +7,12 @@ from cyberagent.trace import add_trace_event
 
 
 def run_foundation_agents(state: ChallengeState) -> ChallengeState:
-    """Run foundational signal agents against the current challenge input."""
+    """Run foundational signal agents through a shared blackboard message chain."""
+    challenge_id = state.get("challenge_id", "")
+    blackboard = Blackboard()
     input_signal = make_signal(
         type="challenge_input",
-        challenge_id=state.get("challenge_id", ""),
+        challenge_id=challenge_id,
         source="foundation_node",
         payload={
             "title": state.get("title", ""),
@@ -18,19 +21,20 @@ def run_foundation_agents(state: ChallengeState) -> ChallengeState:
             "remote_targets": state.get("remote_targets", []),
         },
         provenance="input",
+        recipients=["observer", "memory"],
     )
-    observation = ObserverAgent().process(input_signal)[0]
-    memory_prior = MemoryAgent().process(input_signal)[0]
-    hypothesis = AnalystAgent().process(observation)[0]
-    critic_report = CriticAgent().process(hypothesis)[0]
-    produced: list[Signal] = [
-        input_signal,
-        observation,
-        memory_prior,
-        hypothesis,
-        critic_report,
-    ]
+    blackboard.post(input_signal)
 
+    observer = ObserverAgent()
+    memory = MemoryAgent()
+    analyst = AnalystAgent()
+    critic = CriticAgent()
+    observer.process_pending(blackboard, challenge_id=challenge_id)
+    memory.process_pending(blackboard, challenge_id=challenge_id)
+    analyst.process_pending(blackboard, challenge_id=challenge_id)
+    critic.process_pending(blackboard, challenge_id=challenge_id)
+
+    produced: list[Signal] = blackboard.query(challenge_id=challenge_id)
     next_state: ChallengeState = {
         **state,
         "signals": [*state.get("signals", []), *produced],

@@ -44,6 +44,7 @@ class Blackboard:
                 signal
                 for signal in signals
                 if is_visible_to(signal, recipient)
+                and recipient not in signal.get("delivered_to", [])
                 and (signal["source"] != recipient or not is_broadcast(signal))
             ]
         return list(signals)
@@ -67,6 +68,9 @@ class Blackboard:
             expires_at=now + ttl,
         )
         signal["status"] = "processing"
+        delivered_to = signal.setdefault("delivered_to", [])
+        if agent not in delivered_to:
+            delivered_to.append(agent)
         return True
 
     def claim(self, *, signal_id: str, agent: str, ttl: float = 30) -> bool:
@@ -87,7 +91,12 @@ class Blackboard:
     def mark_completed(self, signal_id: str) -> None:
         for signal in self._signals:
             if signal["id"] == signal_id:
-                signal["status"] = "processed"
+                recipients = signal.get("recipients", [])
+                delivered_to = signal.get("delivered_to", [])
+                if recipients and any(agent not in delivered_to for agent in recipients):
+                    signal["status"] = "pending"
+                else:
+                    signal["status"] = "processed"
                 break
         self.release_lease(signal_id=signal_id)
 

@@ -47,6 +47,7 @@ class ObserverAgent(SignalAgent):
                 payload={"summary": "challenge observed", "input": signal["payload"]},
                 provenance="inference",
                 parent_ids=[signal["id"]],
+                recipients=["analyst"],
             )
         ]
 
@@ -64,6 +65,7 @@ class AnalystAgent(SignalAgent):
                 payload={"summary": "candidate solving direction", "basis": signal["payload"]},
                 provenance="inference",
                 parent_ids=[signal["id"]],
+                recipients=["critic"],
             )
         ]
 

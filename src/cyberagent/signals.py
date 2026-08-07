@@ -28,6 +28,7 @@ class Signal(TypedDict):
     parent_ids: list[str]
     status: SignalStatus
     recipients: NotRequired[list[str]]
+    delivered_to: NotRequired[list[str]]
     confidence: NotRequired[float]
 
 

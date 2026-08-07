@@ -18,6 +18,19 @@ def test_run_foundation_agents_adds_structured_signals():
     assert "critic_report" in signal_types
     assert result["findings"][-1]["agent"] == "foundation_agents"
 
+    signals = result["signals"]
+    by_type = {signal["type"]: signal for signal in signals}
+    assert len(signals) == 5
+    assert by_type["challenge_input"]["status"] == "processed"
+    assert by_type["observation"]["status"] == "processed"
+    assert by_type["hypothesis"]["status"] == "processed"
+    assert by_type["memory_prior"]["status"] == "pending"
+    assert by_type["critic_report"]["status"] == "pending"
+    assert by_type["observation"]["parent_ids"] == [by_type["challenge_input"]["id"]]
+    assert by_type["memory_prior"]["parent_ids"] == [by_type["challenge_input"]["id"]]
+    assert by_type["hypothesis"]["parent_ids"] == [by_type["observation"]["id"]]
+    assert by_type["critic_report"]["parent_ids"] == [by_type["hypothesis"]["id"]]
+
 
 def test_run_evidence_gate_passes_with_critic_and_tool_output():
     state = run_foundation_agents(initial_state("gate01"))

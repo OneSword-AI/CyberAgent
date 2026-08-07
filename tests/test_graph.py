@@ -47,6 +47,19 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert result["candidate_flags"] == ["flag{from_web}"]
     assert result["final_flag"] == "flag{from_web}"
     assert result["verification_results"][-1]["valid"] is True
+    signal_types = [signal["type"] for signal in result["signals"]]
+    assert signal_types[:5] == [
+        "challenge_input",
+        "observation",
+        "memory_prior",
+        "hypothesis",
+        "critic_report",
+    ]
+    assert len(result["signals"]) >= 5
+    signal_statuses = {signal["type"]: signal["status"] for signal in result["signals"]}
+    assert signal_statuses["challenge_input"] == "processed"
+    assert signal_statuses["observation"] == "processed"
+    assert signal_statuses["hypothesis"] == "processed"
     trace_events = [event["event"] for event in result["trace"]]
     assert "challenge.fetch" in trace_events
     assert "llm.fallback" in trace_events
