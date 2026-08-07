@@ -11,6 +11,7 @@ class ChallengeState(TypedDict):
     remote_targets: list[str]
     predicted_categories: list[str]
     next_agents: list[str]
+    active_agents: list[str]
     candidate_flags: list[str]
     findings: list[dict]
     failed_attempts: list[dict]

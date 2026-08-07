@@ -33,6 +33,36 @@ def test_build_classification_prompt_includes_challenge_context():
     assert "next_agents" in prompt
 
 
+@pytest.mark.skipif(
+    os.getenv("PRINT_LLM_CLASSIFICATION_PROMPT") != "1",
+    reason="set PRINT_LLM_CLASSIFICATION_PROMPT=1 to print the LLM classification prompt",
+)
+def test_print_llm_classification_prompt():
+    state = initial_state("prompt-preview")
+    state.update(
+        {
+            "title": "夜班登记簿",
+            "description": (
+                "值班系统只允许员工从前台登记进入，但有一条记录没有姓名，"
+                "却能看到后台房间的编号。页面没有明显报错，只是在查询时偶尔返回多余内容。"
+            ),
+            "attachments": ["access-log.txt"],
+            "remote_targets": ["http://challenge.example.test"],
+            "category_hint": "",
+            "flag_format": "flag{...}",
+        }
+    )
+
+    prompt = build_classification_prompt(state)
+
+    print("\nGenerated LLM classification prompt:")
+    print(prompt)
+
+    assert "夜班登记簿" in prompt
+    assert "只返回 JSON" in prompt
+    assert "predicted_categories" in prompt
+
+
 def test_parse_classification_response_accepts_json_code_fence():
     result = parse_classification_response(
         """```json

@@ -49,3 +49,8 @@ RUN_LLM_INTEGRATION_TESTS=1 uv run pytest tests/test_llm_classifier.py::test_llm
 
 RUN_LLM_ANALYSIS_TESTS=1 uv run pytest tests/test_llm_challenge_analysis.py -s
 ```
+
+### 调用大模型测试子agent调度
+```bash
+PRINT_LLM_CLASSIFICATION_PROMPT=1 uv run pytest tests/test_llm_classifier.py::test_print_llm_classification_prompt -s
+```
