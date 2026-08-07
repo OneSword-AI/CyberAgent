@@ -98,3 +98,42 @@ def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
     assert result["failed_attempts"][-1]["reason"] == "no valid flag accepted"
     trace_events = [event["event"] for event in result["trace"]]
     assert trace_events.count("retry.schedule") == 1
+
+
+def test_graph_dispatches_multiple_specialists_with_send(tmp_path, monkeypatch):
+    def fake_http_get(url: str):
+        return {
+            "tool": "http_get",
+            "ok": True,
+            "output": "no flag here",
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"url": url},
+        }
+
+    challenge_dir = tmp_path / "challenges"
+    challenge_dir.mkdir()
+    (challenge_dir / "mixed01.json").write_text(
+        json.dumps(
+            {
+                "title": "web crypto mix",
+                "description": "web http service with crypto rsa notes",
+                "remote_targets": ["http://web.example.test"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("CHALLENGE_PROVIDER", "local_json")
+    monkeypatch.setenv("CHALLENGE_LOCAL_JSON_DIR", str(challenge_dir))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
+
+    state = initial_state("mixed01")
+    state["max_retries"] = 0
+    result = build_graph().invoke(state)
+
+    assert result["active_agents"] == ["web_agent", "crypto_agent"]
+    finding_agents = [finding["agent"] for finding in result["findings"]]
+    assert "web_agent" in finding_agents
+    assert "crypto_agent" in finding_agents

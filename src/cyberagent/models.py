@@ -1,4 +1,12 @@
-from typing import Any, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
+
+
+def _append_list(left: list, right: list) -> list:
+    return [*left, *right]
+
+
+def _last(_left: Any, right: Any) -> Any:
+    return right
 
 
 class ChallengeState(TypedDict):
@@ -7,20 +15,20 @@ class ChallengeState(TypedDict):
     title: NotRequired[str]
     description: NotRequired[str]
 
-    attachments: list[str]
-    downloaded_attachments: list[dict]
-    remote_targets: list[str]
-    predicted_categories: list[str]
-    next_agents: list[str]
-    active_agents: list[str]
-    candidate_flags: list[str]
-    findings: list[dict]
-    verification_results: list[dict]
-    failed_attempts: list[dict]
-    tool_outputs: list[dict]
-    trace: list[dict]
-    retry_count: int
-    max_retries: int
+    attachments: Annotated[list[str], _last]
+    downloaded_attachments: Annotated[list[dict], _append_list]
+    remote_targets: Annotated[list[str], _last]
+    predicted_categories: Annotated[list[str], _last]
+    next_agents: Annotated[list[str], _last]
+    active_agents: Annotated[list[str], _last]
+    candidate_flags: Annotated[list[str], _last]
+    findings: Annotated[list[dict], _append_list]
+    verification_results: Annotated[list[dict], _append_list]
+    failed_attempts: Annotated[list[dict], _append_list]
+    tool_outputs: Annotated[list[dict], _append_list]
+    trace: Annotated[list[dict], _append_list]
+    retry_count: Annotated[int, _last]
+    max_retries: Annotated[int, _last]
 
     challenge_id: NotRequired[str]
     artifacts_dir: NotRequired[str]
