@@ -1,5 +1,5 @@
 from cyberagent.models import ChallengeState
-from cyberagent.tools import ToolResult, record_tool_output
+from cyberagent.tools import ToolResult, http_get, record_tool_output
 
 
 def web_agent(state: ChallengeState) -> ChallengeState:
@@ -8,14 +8,7 @@ def web_agent(state: ChallengeState) -> ChallengeState:
         return state
 
     target = _first_remote_target(state)
-    result: ToolResult = {
-        "tool": "web_probe",
-        "ok": bool(target),
-        "output": f"Detected HTTP target: {target}" if target else "No HTTP target found.",
-        "error": None if target else "missing remote target",
-        "exit_code": 0 if target else 1,
-        "metadata": {"target": target},
-    }
+    result = http_get(target) if target else _missing_target_result()
     return record_tool_output(state, result, caller="web_agent")
 
 
@@ -72,3 +65,14 @@ def _first_remote_target(state: ChallengeState) -> str:
         if isinstance(target, str) and target.strip():
             return target.strip()
     return ""
+
+
+def _missing_target_result() -> ToolResult:
+    return {
+        "tool": "http_get",
+        "ok": False,
+        "output": "",
+        "error": "missing remote target",
+        "exit_code": None,
+        "metadata": {"url": ""},
+    }

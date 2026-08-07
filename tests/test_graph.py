@@ -4,6 +4,16 @@ from cyberagent.graph import build_graph, initial_state
 
 
 def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch):
+    def fake_http_get(url: str):
+        return {
+            "tool": "http_get",
+            "ok": True,
+            "output": "ok",
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"url": url},
+        }
+
     challenge_dir = tmp_path / "challenges"
     challenge_dir.mkdir()
     (challenge_dir / "web01.json").write_text(
@@ -20,6 +30,7 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     monkeypatch.setenv("CHALLENGE_PROVIDER", "local_json")
     monkeypatch.setenv("CHALLENGE_LOCAL_JSON_DIR", str(challenge_dir))
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
 
     result = build_graph().invoke(initial_state("web01"))
 
@@ -29,5 +40,5 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert result["active_agents"] == ["web_agent"]
     assert result["findings"][-1]["agent"] == "web_agent"
     assert result["tool_outputs"][-1]["caller"] == "web_agent"
-    assert result["tool_outputs"][-1]["tool"] == "web_probe"
+    assert result["tool_outputs"][-1]["tool"] == "http_get"
     assert result["tool_outputs"][-1]["ok"] is True
