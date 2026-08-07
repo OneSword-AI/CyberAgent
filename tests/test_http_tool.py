@@ -1,7 +1,7 @@
 from io import BytesIO
 from urllib.error import HTTPError, URLError
 
-from cyberagent.tools.http import http_get
+from cyberagent.tools.http import http_get, http_post
 
 
 class FakeResponse:
@@ -24,6 +24,8 @@ class FakeResponse:
 def test_http_get_returns_response_metadata(monkeypatch):
     def fake_urlopen(request, timeout):
         assert request.full_url == "https://example.test"
+        assert request.get_method() == "GET"
+        assert request.headers["User-agent"] == "CyberAgent/0.1"
         assert timeout == 5
         return FakeResponse(b"hello")
 
@@ -36,6 +38,8 @@ def test_http_get_returns_response_metadata(monkeypatch):
     assert result["output"] == "hello"
     assert result["error"] is None
     assert result["exit_code"] == 0
+    assert result["metadata"]["method"] == "GET"
+    assert result["metadata"]["scheme"] == "https"
     assert result["metadata"]["status"] == 200
     assert result["metadata"]["truncated"] is False
 
@@ -59,6 +63,13 @@ def test_http_get_rejects_unsupported_scheme():
     assert result["error"] == "unsupported URL scheme: file"
 
 
+def test_http_get_rejects_missing_host():
+    result = http_get("https:///missing-host")
+
+    assert result["ok"] is False
+    assert result["error"] == "missing URL host"
+
+
 def test_http_get_handles_http_error(monkeypatch):
     def fake_urlopen(request, timeout):
         raise HTTPError(
@@ -77,6 +88,8 @@ def test_http_get_handles_http_error(monkeypatch):
     assert result["output"] == "missing"
     assert result["error"] == "HTTP 404"
     assert result["exit_code"] == 404
+    assert result["metadata"]["method"] == "GET"
+    assert result["metadata"]["scheme"] == "https"
 
 
 def test_http_get_handles_url_error(monkeypatch):
@@ -89,3 +102,26 @@ def test_http_get_handles_url_error(monkeypatch):
 
     assert result["ok"] is False
     assert result["error"] == "URL error: connection refused"
+
+
+def test_http_post_sends_encoded_body_and_headers(monkeypatch):
+    def fake_urlopen(request, timeout):
+        assert request.full_url == "https://example.test/login"
+        assert request.get_method() == "POST"
+        assert request.data == b"username=admin"
+        assert request.headers["Content-type"] == "application/x-www-form-urlencoded"
+        return FakeResponse(b"posted")
+
+    monkeypatch.setattr("cyberagent.tools.http.urlopen", fake_urlopen)
+
+    result = http_post(
+        "https://example.test/login",
+        data="username=admin",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert result["tool"] == "http_post"
+    assert result["ok"] is True
+    assert result["output"] == "posted"
+    assert result["metadata"]["method"] == "POST"
+    assert result["metadata"]["scheme"] == "https"
