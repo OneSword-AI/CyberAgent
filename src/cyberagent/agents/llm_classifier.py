@@ -14,6 +14,7 @@ KNOWN_AGENTS = {
     "Crypto": "crypto_agent",
     "Misc": "misc_agent",
     "Forensics": "forensics_agent",
+    "Other": "other_agent",
 }
 KNOWN_COMPLEXITIES = ("simple", "medium", "complex")
 
@@ -59,14 +60,15 @@ def build_classification_prompt(state: ChallengeState) -> str:
 你是 CyberAgent 的 CTF 题目分类节点。
 
 请根据题目信息判断题目方向、复杂度和下一步应调度的专科 Agent。
+如果题目不属于已知方向，请将题目方向返回为 Other。
 
-允许的题目方向只能是：
+优先使用的题目方向是：
 {", ".join(KNOWN_CATEGORIES)}
 
 允许的复杂度只能是：
 {", ".join(KNOWN_COMPLEXITIES)}
 
-允许的 next_agents 只能是：
+优先使用的 next_agents 是：
 {", ".join(KNOWN_AGENTS.values())}
 
 题目标题：
@@ -109,6 +111,7 @@ def validate_classification_result(data: dict[str, Any]) -> ClassificationResult
         data,
         "predicted_categories",
         allowed=set(KNOWN_CATEGORIES),
+        unknown_value="Other",
         required=True,
     )
     complexity = _validated_str(
@@ -121,6 +124,7 @@ def validate_classification_result(data: dict[str, Any]) -> ClassificationResult
         data,
         "next_agents",
         allowed=set(KNOWN_AGENTS.values()),
+        unknown_value="other_agent",
         required=False,
     )
 
@@ -173,6 +177,7 @@ def _validated_str_list(
     key: str,
     *,
     allowed: set[str],
+    unknown_value: str | None,
     required: bool,
 ) -> list[str]:
     value = data.get(key)
@@ -187,7 +192,9 @@ def _validated_str_list(
             raise ValueError(f"{key} must contain only strings")
         item = item.strip()
         if item not in allowed:
-            raise ValueError(f"unsupported {key} value: {item}")
+            if unknown_value is None:
+                raise ValueError(f"unsupported {key} value: {item}")
+            item = unknown_value
         result.append(item)
 
     result = list(dict.fromkeys(result))

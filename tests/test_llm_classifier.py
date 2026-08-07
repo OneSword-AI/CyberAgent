@@ -1,5 +1,3 @@
-import pytest
-
 from cyberagent.agents.llm_classifier import (
     build_classification_prompt,
     fallback_classify,
@@ -61,18 +59,20 @@ def test_parse_classification_response_derives_next_agents_when_missing():
     assert result["next_agents"] == ["crypto_agent", "misc_agent"]
 
 
-def test_parse_classification_response_rejects_unknown_category():
-    with pytest.raises(ValueError):
-        parse_classification_response(
-            """
-            {
-              "predicted_categories": ["Osint"],
-              "complexity": "simple",
-              "reasoning_summary": "Unknown category.",
-              "next_agents": ["misc_agent"]
-            }
-            """
-        )
+def test_parse_classification_response_maps_unknown_category_to_other():
+    result = parse_classification_response(
+        """
+        {
+          "predicted_categories": ["Osint"],
+          "complexity": "simple",
+          "reasoning_summary": "OSINT-style challenge.",
+          "next_agents": ["osint_agent"]
+        }
+        """
+    )
+
+    assert result["predicted_categories"] == ["Other"]
+    assert result["next_agents"] == ["other_agent"]
 
 
 def test_fallback_classify_uses_rule_classifier_and_records_error():
@@ -91,3 +91,18 @@ def test_fallback_classify_uses_rule_classifier_and_records_error():
     assert result["complexity"] == "medium"
     assert result["findings"][-1]["agent"] == "llm_classifier"
     assert "missing api key" in result["findings"][-1]["error"]
+
+
+def test_fallback_classify_uses_other_for_unknown_rule_category():
+    state = initial_state("1")
+    state.update(
+        {
+            "title": "guess me",
+            "description": "No obvious CTF category hints.",
+        }
+    )
+
+    result = fallback_classify(state, RuntimeError("invalid llm output"))
+
+    assert result["predicted_categories"] == ["Other"]
+    assert result["next_agents"] == ["other_agent"]
