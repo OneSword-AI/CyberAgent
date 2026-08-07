@@ -6,6 +6,7 @@ Fully Automated CTF Agent
 
 - 新特性：新建功能分支 → 提交 PR → 审核后合并。
 - `main` 分支已开启保护：禁止直接推送，所有改动必须通过 PR 合并。
+- 请不要一次性提交大量代码，请提交`原子化`的commit，[参考](https://www.conventionalcommits.org/zh-hans/v1.0.0/)
 
 **原因：**
 
