@@ -25,3 +25,15 @@ def test_run_challenge_can_skip_env_loading(monkeypatch):
     runtime.run_challenge("runtime01", load_env=False)
 
     assert calls == []
+
+
+def test_run_challenge_can_save_final_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtime, "load_dotenv", lambda: None)
+    monkeypatch.setattr(runtime, "build_graph", lambda: FakeGraph())
+
+    result = runtime.run_challenge("runtime01", save=True, output_dir=tmp_path)
+
+    path = tmp_path / "runtime01" / "state.json"
+    assert result["title"] == "from runtime"
+    assert path.exists()
+    assert "from runtime" in path.read_text(encoding="utf-8")
