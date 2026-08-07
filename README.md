@@ -21,3 +21,22 @@ Fully Automated CTF Agent
 ```bash
 uv sync
 ```
+
+## 大模型配置
+
+项目使用 OpenAI-compatible Chat API。以 DeepSeek 为例：
+
+```env
+OPENAI_API_KEY=your-deepseek-api-key
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
+OPENAI_TEMPERATURE=0
+OPENAI_TIMEOUT=60
+OPENAI_MAX_RETRIES=2
+```
+
+如果使用其他兼容 OpenAI 格式的服务，通常只需要替换：
+
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENAI_MODEL`
