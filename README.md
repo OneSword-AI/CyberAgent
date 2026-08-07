@@ -40,3 +40,10 @@ OPENAI_MAX_RETRIES=2
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
+
+## 测试
+
+### 调用真实大模型分析题目信息并调度
+```bash
+RUN_LLM_INTEGRATION_TESTS=1 uv run pytest tests/test_llm_classifier.py::test_llm_classify_challenge_with_real_model -s
+```

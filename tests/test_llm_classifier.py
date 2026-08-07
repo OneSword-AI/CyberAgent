@@ -1,6 +1,12 @@
+import os
+
+import pytest
+from dotenv import load_dotenv
+
 from cyberagent.agents.llm_classifier import (
     build_classification_prompt,
     fallback_classify,
+    llm_classify_challenge,
     parse_classification_response,
 )
 from cyberagent.graph import initial_state
@@ -106,3 +112,54 @@ def test_fallback_classify_uses_other_for_unknown_rule_category():
 
     assert result["predicted_categories"] == ["Other"]
     assert result["next_agents"] == ["other_agent"]
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_LLM_INTEGRATION_TESTS") != "1",
+    reason="set RUN_LLM_INTEGRATION_TESTS=1 to call the real LLM API",
+)
+def test_llm_classify_challenge_with_real_model():
+    load_dotenv()
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY is not configured")
+
+    state = initial_state("demo-web")
+    state.update(
+        {
+            "title": "easy login",
+            "description": (
+                "A web challenge with a login page. Try to bypass authentication "
+                "and find the flag."
+            ),
+            "attachments": [],
+            "remote_targets": ["http://example.test"],
+            "category_hint": "",
+            "flag_format": "flag{...}",
+        }
+    )
+
+    print("\nLLM integration input:")
+    print(f"  model: {os.getenv('OPENAI_MODEL')}")
+    print(f"  base_url: {os.getenv('OPENAI_BASE_URL')}")
+    print(f"  title: {state.get('title')}")
+    print(f"  description: {state.get('description')}")
+    print(f"  attachments: {state.get('attachments')}")
+    print(f"  remote_targets: {state.get('remote_targets')}")
+    print(f"  category_hint: {state.get('category_hint')}")
+    print(f"  flag_format: {state.get('flag_format')}")
+
+    result = llm_classify_challenge(state)
+
+    print("\nLLM integration result:")
+    print(f"  predicted_categories: {result['predicted_categories']}")
+    print(f"  complexity: {result.get('complexity')}")
+    print(f"  next_agents: {result['next_agents']}")
+    print(f"  reasoning_summary: {result.get('reasoning_summary')}")
+    print(f"  last_finding: {result['findings'][-1]}")
+
+    assert result["predicted_categories"]
+    assert result["next_agents"]
+    assert result.get("complexity") in {"simple", "medium", "complex"}
+    assert result.get("reasoning_summary")
+    assert result["findings"][-1]["agent"] == "llm_classifier"
+    assert "LLM classification failed" not in result["findings"][-1]["summary"]
