@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass
 
-from cyberagent.signals import Signal, SignalType
+from cyberagent.signals import Signal, SignalType, is_broadcast, is_visible_to
 
 
 @dataclass
@@ -19,6 +19,8 @@ class Blackboard:
         self._leases: dict[str, Lease] = {}
 
     def post(self, signal: Signal) -> Signal:
+        if any(existing["id"] == signal["id"] for existing in self._signals):
+            raise ValueError(f"signal already exists: {signal['id']}")
         self._signals.append(signal)
         return signal
 
@@ -28,6 +30,7 @@ class Blackboard:
         challenge_id: str | None = None,
         types: set[SignalType] | None = None,
         status: str | None = None,
+        recipient: str | None = None,
     ) -> list[Signal]:
         signals = self._signals
         if challenge_id is not None:
@@ -36,24 +39,75 @@ class Blackboard:
             signals = [signal for signal in signals if signal["type"] in types]
         if status is not None:
             signals = [signal for signal in signals if signal["status"] == status]
+        if recipient is not None:
+            signals = [
+                signal
+                for signal in signals
+                if is_visible_to(signal, recipient)
+                and (signal["source"] != recipient or not is_broadcast(signal))
+            ]
         return list(signals)
 
     def acquire_lease(self, *, signal_id: str, agent: str, ttl: float = 30) -> bool:
+        """Claim a visible pending signal for an agent."""
+        signal = next((item for item in self._signals if item["id"] == signal_id), None)
+        if signal is None or signal["status"] != "pending" or not is_visible_to(signal, agent):
+            return False
+
         now = time.time()
         lease = self._leases.get(signal_id)
         if lease and lease.expires_at > now and lease.agent != agent:
             return False
+        if lease and lease.expires_at <= now:
+            self._leases.pop(signal_id, None)
 
         self._leases[signal_id] = Lease(
             signal_id=signal_id,
             agent=agent,
             expires_at=now + ttl,
         )
+        signal["status"] = "processing"
         return True
 
+    def claim(self, *, signal_id: str, agent: str, ttl: float = 30) -> bool:
+        return self.acquire_lease(signal_id=signal_id, agent=agent, ttl=ttl)
+
+    def claim_message(self, *, signal_id: str, agent: str, ttl: float = 30) -> bool:
+        return self.acquire_lease(signal_id=signal_id, agent=agent, ttl=ttl)
+
+    def mark_processing(self, signal_id: str) -> None:
+        for signal in self._signals:
+            if signal["id"] == signal_id:
+                signal["status"] = "processing"
+                break
+
     def mark_processed(self, signal_id: str) -> None:
+        self.mark_completed(signal_id)
+
+    def mark_completed(self, signal_id: str) -> None:
         for signal in self._signals:
             if signal["id"] == signal_id:
                 signal["status"] = "processed"
                 break
+        self.release_lease(signal_id=signal_id)
+
+    def mark_failed(self, signal_id: str) -> None:
+        for signal in self._signals:
+            if signal["id"] == signal_id:
+                signal["status"] = "failed"
+                break
+        self.release_lease(signal_id=signal_id)
+
+    def release_lease(self, *, signal_id: str) -> None:
         self._leases.pop(signal_id, None)
+
+    def lease(self, *, signal_id: str) -> Lease | None:
+        lease = self._leases.get(signal_id)
+        if lease is not None and lease.expires_at <= time.time():
+            self._leases.pop(signal_id, None)
+            for signal in self._signals:
+                if signal["id"] == signal_id and signal["status"] == "processing":
+                    signal["status"] = "pending"
+                    break
+            return None
+        return lease

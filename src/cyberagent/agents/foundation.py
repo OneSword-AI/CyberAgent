@@ -1,5 +1,5 @@
 from cyberagent.blackboard import Blackboard
-from cyberagent.signals import Signal, make_signal
+from cyberagent.signals import Signal, is_visible_to, make_signal
 
 
 class SignalAgent:
@@ -11,13 +11,21 @@ class SignalAgent:
 
     def process_pending(self, blackboard: Blackboard, *, challenge_id: str) -> list[Signal]:
         produced: list[Signal] = []
-        for signal in blackboard.query(challenge_id=challenge_id, status="pending"):
-            if not self.can_process(signal):
+        for signal in blackboard.query(
+            challenge_id=challenge_id,
+            status="pending",
+            recipient=self.name,
+        ):
+            if not is_visible_to(signal, self.name) or not self.can_process(signal):
                 continue
-            if not blackboard.acquire_lease(signal_id=signal["id"], agent=self.name):
+            if not blackboard.claim(signal_id=signal["id"], agent=self.name):
                 continue
-            produced.extend(self.process(signal))
-            blackboard.mark_processed(signal["id"])
+            try:
+                produced.extend(self.process(signal))
+            except Exception:
+                blackboard.mark_failed(signal["id"])
+                raise
+            blackboard.mark_completed(signal["id"])
         for signal in produced:
             blackboard.post(signal)
         return produced

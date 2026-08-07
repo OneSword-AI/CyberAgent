@@ -1,6 +1,8 @@
 from cyberagent.agents.foundation import AnalystAgent, CriticAgent, MemoryAgent, ObserverAgent
 from cyberagent.blackboard import Blackboard
 from cyberagent.evidence_gate import evidence_gate_passes
+import pytest
+
 from cyberagent.signals import make_signal
 
 
@@ -41,6 +43,46 @@ def test_memory_agent_outputs_prior_only():
 
     assert priors[0]["type"] == "memory_prior"
     assert priors[0]["provenance"] == "memory_prior"
+
+
+def test_process_pending_ignores_messages_for_other_agents():
+    blackboard = Blackboard()
+    blackboard.post(
+        make_signal(
+            type="challenge_input",
+            challenge_id="fa02",
+            source="test",
+            payload={},
+            provenance="input",
+            recipients=["analyst"],
+        )
+    )
+
+    assert ObserverAgent().process_pending(blackboard, challenge_id="fa02") == []
+
+
+def test_process_pending_marks_failed_when_processing_raises():
+    class FailingAgent(ObserverAgent):
+        name = "failing_observer"
+
+        def process(self, signal):
+            raise RuntimeError("boom")
+
+    blackboard = Blackboard()
+    signal = make_signal(
+        type="challenge_input",
+        challenge_id="fa03",
+        source="test",
+        payload={},
+        provenance="input",
+    )
+    blackboard.post(signal)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        FailingAgent().process_pending(blackboard, challenge_id="fa03")
+
+    assert signal["status"] == "failed"
+    assert blackboard.lease(signal_id=signal["id"]) is None
 
 
 def test_evidence_gate_requires_direct_evidence_and_critic_approval():
