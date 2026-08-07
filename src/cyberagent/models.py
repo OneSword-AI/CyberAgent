@@ -16,6 +16,7 @@ class ChallengeState(TypedDict):
     findings: list[dict]
     failed_attempts: list[dict]
     tool_outputs: list[dict]
+    trace: list[dict]
 
     challenge_id: NotRequired[str]
     provider_name: NotRequired[str]

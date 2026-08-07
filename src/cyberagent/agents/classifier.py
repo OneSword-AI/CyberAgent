@@ -1,6 +1,7 @@
 from cyberagent.agents.constants import KNOWN_CATEGORIES
 from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
+from cyberagent.trace import add_trace_event
 
 
 def classify_challenge(state: ChallengeState) -> ChallengeState:
@@ -27,6 +28,12 @@ def classify_challenge(state: ChallengeState) -> ChallengeState:
         **state,
         "predicted_categories": categories,
     }
+    next_state = add_trace_event(
+        next_state,
+        node="classify_challenge",
+        event="rule.classify",
+        details={"predicted_categories": categories},
+    )
     return add_finding(
         next_state,
         agent="classifier",

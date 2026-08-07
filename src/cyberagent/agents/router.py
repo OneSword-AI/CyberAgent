@@ -1,17 +1,25 @@
 from cyberagent.agents.constants import CATEGORY_TO_AGENT, KNOWN_AGENT_NAMES
 from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
+from cyberagent.trace import add_trace_event
 
 
 def route_agent(state: ChallengeState) -> ChallengeState:
     """Select the specialist agents that should handle the challenge next."""
     active_agents = _select_agents(state)
 
-    return add_finding(
-        {
+    next_state: ChallengeState = {
             **state,
             "active_agents": active_agents,
-        },
+    }
+    next_state = add_trace_event(
+        next_state,
+        node="route_agent",
+        event="agent.route",
+        details={"active_agents": active_agents},
+    )
+    return add_finding(
+        next_state,
         agent="route_agent",
         summary=f"Scheduled agents: {', '.join(active_agents)}",
         evidence={

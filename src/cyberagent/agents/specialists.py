@@ -1,5 +1,6 @@
 from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
+from cyberagent.trace import add_trace_event
 from cyberagent.tools import ToolResult, http_get, record_tool_output
 
 
@@ -45,8 +46,17 @@ def _run_specialist(
     if agent_name not in state.get("active_agents", []):
         return state
 
-    return add_finding(
+    next_state = add_trace_event(
         state,
+        node=agent_name,
+        event="specialist.receive",
+        details={
+            "predicted_categories": state.get("predicted_categories", []),
+            "active_agents": state.get("active_agents", []),
+        },
+    )
+    return add_finding(
+        next_state,
         agent=agent_name,
         summary=f"{display_name} received the challenge.",
         evidence={

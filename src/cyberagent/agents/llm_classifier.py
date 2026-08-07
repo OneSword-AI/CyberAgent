@@ -12,6 +12,7 @@ from cyberagent.agents.constants import (
 from cyberagent.evidence import add_finding
 from cyberagent.llm import get_llm
 from cyberagent.models import ChallengeState
+from cyberagent.trace import add_trace_event
 
 
 class ClassificationResult(TypedDict):
@@ -38,7 +39,16 @@ def llm_classify_challenge(state: ChallengeState) -> ChallengeState:
         "next_agents": result["next_agents"],
     }
     return add_finding(
-        next_state,
+        add_trace_event(
+            next_state,
+            node="classify_challenge",
+            event="llm.classify",
+            details={
+                "predicted_categories": result["predicted_categories"],
+                "complexity": result["complexity"],
+                "next_agents": result["next_agents"],
+            },
+        ),
         agent="llm_classifier",
         summary=result["reasoning_summary"],
         evidence={
@@ -156,7 +166,12 @@ def fallback_classify(state: ChallengeState, error: Exception) -> ChallengeState
         "next_agents": next_agents,
     }
     return add_finding(
-        next_state,
+        add_trace_event(
+            next_state,
+            node="classify_challenge",
+            event="llm.fallback",
+            details={"error": str(error), "next_agents": next_agents},
+        ),
         agent="llm_classifier",
         summary="LLM classification failed; used rule-based fallback.",
         error=str(error),

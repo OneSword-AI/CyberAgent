@@ -3,6 +3,7 @@ from typing import Any
 from cyberagent.evidence import add_finding
 from cyberagent.flag import extract_flags, merge_candidate_flags
 from cyberagent.models import ChallengeState
+from cyberagent.trace import add_trace_event
 
 
 def extract_candidate_flags(state: ChallengeState) -> ChallengeState:
@@ -20,7 +21,12 @@ def extract_candidate_flags(state: ChallengeState) -> ChallengeState:
     }
 
     return add_finding(
-        next_state,
+        add_trace_event(
+            next_state,
+            node="extract_candidate_flags",
+            event="flag.extract",
+            details={"candidate_flags": discovered},
+        ),
         agent="flag_extractor",
         summary=f"Extracted {len(discovered)} candidate flag(s).",
         evidence={"candidate_flags": discovered},

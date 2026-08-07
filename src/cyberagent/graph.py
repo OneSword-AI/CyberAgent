@@ -42,4 +42,5 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "findings": [],
         "failed_attempts": [],
         "tool_outputs": [],
+        "trace": [],
     }
