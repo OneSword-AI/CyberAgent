@@ -8,6 +8,7 @@ class ChallengeState(TypedDict):
     description: NotRequired[str]
 
     attachments: list[str]
+    downloaded_attachments: list[dict]
     remote_targets: list[str]
     predicted_categories: list[str]
     next_agents: list[str]
@@ -20,6 +21,7 @@ class ChallengeState(TypedDict):
     trace: list[dict]
 
     challenge_id: NotRequired[str]
+    artifacts_dir: NotRequired[str]
     provider_name: NotRequired[str]
     raw_challenge: NotRequired[dict[str, Any]]
     flag_format: NotRequired[str]
