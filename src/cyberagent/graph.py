@@ -2,7 +2,7 @@ from langgraph.graph import END, StateGraph
 
 from cyberagent.agents.classifier import classify_challenge
 from cyberagent.models import ChallengeState
-from cyberagent.providers.ctfd import fetch_challenge
+from cyberagent.providers import fetch_challenge
 
 
 def build_graph():

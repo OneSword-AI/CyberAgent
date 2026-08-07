@@ -1,4 +1,4 @@
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class ChallengeState(TypedDict):
@@ -16,6 +16,8 @@ class ChallengeState(TypedDict):
     tool_outputs: list[dict]
 
     challenge_id: NotRequired[str]
+    provider_name: NotRequired[str]
+    raw_challenge: NotRequired[dict[str, Any]]
     flag_format: NotRequired[str]
     category_hint: NotRequired[str]
     final_flag: NotRequired[str]
