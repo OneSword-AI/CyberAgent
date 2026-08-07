@@ -5,8 +5,10 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
 from cyberagent.agents.attachment_downloader import download_attachments
+from cyberagent.agents.evidence_gate import run_evidence_gate
 from cyberagent.agents.flag_extractor import extract_candidate_flags
 from cyberagent.agents.flag_verifier import verify_flag
+from cyberagent.agents.foundation_node import run_foundation_agents
 from cyberagent.agents.llm_classifier import llm_classify_challenge
 from cyberagent.agents.registry import SPECIALIST_NODES, SPECIALIST_ORDER
 from cyberagent.agents.retry import retry_agent
@@ -20,22 +22,34 @@ def build_graph():
 
     graph.add_node("fetch_challenge", _as_delta_node(fetch_challenge))
     graph.add_node("download_attachments", _as_delta_node(download_attachments))
+    graph.add_node("foundation_agents", _as_delta_node(run_foundation_agents))
     graph.add_node("classify_challenge", _as_delta_node(llm_classify_challenge))
     graph.add_node("route_agent", _as_delta_node(route_agent))
     for agent_name, agent_node in SPECIALIST_NODES.items():
         graph.add_node(agent_name, _as_delta_node(agent_node))
     graph.add_node("extract_candidate_flags", _as_delta_node(extract_candidate_flags))
+    graph.add_node("evidence_gate", _as_delta_node(run_evidence_gate))
     graph.add_node("verify_flag", _as_delta_node(verify_flag))
     graph.add_node("retry_agent", _as_delta_node(retry_agent))
 
     graph.set_entry_point("fetch_challenge")
     graph.add_edge("fetch_challenge", "download_attachments")
-    graph.add_edge("download_attachments", "classify_challenge")
+    graph.add_edge("download_attachments", "foundation_agents")
+    graph.add_edge("foundation_agents", "classify_challenge")
     graph.add_edge("classify_challenge", "route_agent")
     graph.add_conditional_edges("route_agent", _specialist_routes)
     for agent_name in SPECIALIST_ORDER:
         graph.add_edge(agent_name, "extract_candidate_flags")
-    graph.add_edge("extract_candidate_flags", "verify_flag")
+    graph.add_edge("extract_candidate_flags", "evidence_gate")
+    graph.add_conditional_edges(
+        "evidence_gate",
+        _evidence_gate_route,
+        {
+            "verify": "verify_flag",
+            "retry": "retry_agent",
+            "end": END,
+        },
+    )
     graph.add_conditional_edges(
         "verify_flag",
         _verification_route,
@@ -64,15 +78,25 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "failed_attempts": [],
         "tool_outputs": [],
         "trace": [],
+        "signals": [],
         "artifacts_dir": "artifacts",
         "retry_count": 0,
         "max_retries": 1,
+        "evidence_gate_passed": False,
     }
 
 
 def _verification_route(state: ChallengeState) -> str:
     if state.get("final_flag"):
         return "end"
+    if state.get("retry_count", 0) < state.get("max_retries", 1):
+        return "retry"
+    return "end"
+
+
+def _evidence_gate_route(state: ChallengeState) -> str:
+    if state.get("evidence_gate_passed"):
+        return "verify"
     if state.get("retry_count", 0) < state.get("max_retries", 1):
         return "retry"
     return "end"

@@ -4,14 +4,14 @@ from cyberagent.graph import build_graph, initial_state
 
 
 def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch):
-    def fake_http_get(url: str):
+    def fake_execute_tool(name: str, request: dict, *, caller: str):
         return {
             "tool": "http_get",
             "ok": True,
             "output": "ok flag{from_web}",
             "error": None,
             "exit_code": 0,
-            "metadata": {"url": url},
+            "metadata": {"url": request["url"]},
         }
 
     challenge_dir = tmp_path / "challenges"
@@ -30,7 +30,7 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     monkeypatch.setenv("CHALLENGE_PROVIDER", "local_json")
     monkeypatch.setenv("CHALLENGE_LOCAL_JSON_DIR", str(challenge_dir))
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
+    monkeypatch.setattr("cyberagent.agents.specialists.execute_tool", fake_execute_tool)
 
     result = build_graph().invoke(initial_state("web01"))
 
@@ -60,15 +60,15 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
 def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
     calls = []
 
-    def fake_http_get(url: str):
-        calls.append(url)
+    def fake_execute_tool(name: str, request: dict, *, caller: str):
+        calls.append(request["url"])
         return {
             "tool": "http_get",
             "ok": True,
             "output": "no flag here",
             "error": None,
             "exit_code": 0,
-            "metadata": {"url": url},
+            "metadata": {"url": request["url"]},
         }
 
     challenge_dir = tmp_path / "challenges"
@@ -87,7 +87,7 @@ def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
     monkeypatch.setenv("CHALLENGE_PROVIDER", "local_json")
     monkeypatch.setenv("CHALLENGE_LOCAL_JSON_DIR", str(challenge_dir))
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
+    monkeypatch.setattr("cyberagent.agents.specialists.execute_tool", fake_execute_tool)
 
     result = build_graph().invoke(initial_state("web02"))
 
@@ -101,14 +101,14 @@ def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
 
 
 def test_graph_dispatches_multiple_specialists_with_send(tmp_path, monkeypatch):
-    def fake_http_get(url: str):
+    def fake_execute_tool(name: str, request: dict, *, caller: str):
         return {
             "tool": "http_get",
             "ok": True,
             "output": "no flag here",
             "error": None,
             "exit_code": 0,
-            "metadata": {"url": url},
+            "metadata": {"url": request["url"]},
         }
 
     challenge_dir = tmp_path / "challenges"
@@ -127,7 +127,7 @@ def test_graph_dispatches_multiple_specialists_with_send(tmp_path, monkeypatch):
     monkeypatch.setenv("CHALLENGE_PROVIDER", "local_json")
     monkeypatch.setenv("CHALLENGE_LOCAL_JSON_DIR", str(challenge_dir))
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
+    monkeypatch.setattr("cyberagent.agents.specialists.execute_tool", fake_execute_tool)
 
     state = initial_state("mixed01")
     state["max_retries"] = 0

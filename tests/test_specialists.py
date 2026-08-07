@@ -11,14 +11,17 @@ from cyberagent.graph import initial_state
 
 
 def test_specialist_adds_finding_when_active(monkeypatch):
-    def fake_http_get(url: str):
+    def fake_execute_tool(name: str, request: dict, *, caller: str):
+        assert name == "http_get"
+        assert request["url"] == "http://example.test"
+        assert caller == "web_agent"
         return {
             "tool": "http_get",
             "ok": True,
             "output": "ok",
             "error": None,
             "exit_code": 0,
-            "metadata": {"url": url},
+            "metadata": {"url": request["url"]},
         }
 
     state = initial_state("1")
@@ -31,7 +34,7 @@ def test_specialist_adds_finding_when_active(monkeypatch):
         }
     )
 
-    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
+    monkeypatch.setattr("cyberagent.agents.specialists.execute_tool", fake_execute_tool)
     result = web_agent(state)
 
     assert result["findings"][-1]["agent"] == "web_agent"
@@ -58,17 +61,17 @@ def test_specialist_returns_state_when_inactive():
 
 
 def test_all_specialist_nodes_can_receive_challenge(monkeypatch):
-    def fake_http_get(url: str):
+    def fake_execute_tool(name: str, request: dict, *, caller: str):
         return {
             "tool": "http_get",
             "ok": True,
             "output": "ok",
             "error": None,
             "exit_code": 0,
-            "metadata": {"url": url},
+            "metadata": {"url": request["url"]},
         }
 
-    monkeypatch.setattr("cyberagent.agents.specialists.http_get", fake_http_get)
+    monkeypatch.setattr("cyberagent.agents.specialists.execute_tool", fake_execute_tool)
     specialists = [
         ("web_agent", web_agent),
         ("pwn_agent", pwn_agent),

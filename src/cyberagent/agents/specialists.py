@@ -1,7 +1,7 @@
 from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
 from cyberagent.trace import add_trace_event
-from cyberagent.tools import ToolResult, http_get, record_tool_output
+from cyberagent.tools import ToolResult, execute_tool, record_tool_output
 
 
 def web_agent(state: ChallengeState) -> ChallengeState:
@@ -10,7 +10,11 @@ def web_agent(state: ChallengeState) -> ChallengeState:
         return state
 
     target = _first_remote_target(state)
-    result = http_get(target) if target else _missing_target_result()
+    result = (
+        execute_tool("http_get", {"url": target}, caller="web_agent")
+        if target
+        else _missing_target_result()
+    )
     return record_tool_output(state, result, caller="web_agent")
 
 

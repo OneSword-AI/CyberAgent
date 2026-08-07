@@ -27,8 +27,10 @@ class ChallengeState(TypedDict):
     failed_attempts: Annotated[list[dict], _append_list]
     tool_outputs: Annotated[list[dict], _append_list]
     trace: Annotated[list[dict], _append_list]
+    signals: Annotated[list[dict], _append_list]
     retry_count: Annotated[int, _last]
     max_retries: Annotated[int, _last]
+    evidence_gate_passed: Annotated[bool, _last]
 
     challenge_id: NotRequired[str]
     artifacts_dir: NotRequired[str]
