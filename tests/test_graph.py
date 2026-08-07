@@ -45,6 +45,8 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert result["tool_outputs"][-1]["tool"] == "http_get"
     assert result["tool_outputs"][-1]["ok"] is True
     assert result["candidate_flags"] == ["flag{from_web}"]
+    assert result["final_flag"] == "flag{from_web}"
+    assert result["verification_results"][-1]["valid"] is True
     trace_events = [event["event"] for event in result["trace"]]
     assert "challenge.fetch" in trace_events
     assert "llm.fallback" in trace_events
@@ -52,3 +54,4 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert "specialist.receive" in trace_events
     assert "tool.output" in trace_events
     assert "flag.extract" in trace_events
+    assert "flag.verify" in trace_events

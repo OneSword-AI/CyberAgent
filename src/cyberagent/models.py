@@ -14,6 +14,7 @@ class ChallengeState(TypedDict):
     active_agents: list[str]
     candidate_flags: list[str]
     findings: list[dict]
+    verification_results: list[dict]
     failed_attempts: list[dict]
     tool_outputs: list[dict]
     trace: list[dict]
