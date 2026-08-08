@@ -1,3 +1,4 @@
+import copy
 import time
 from dataclasses import dataclass
 
@@ -15,7 +16,7 @@ class Blackboard:
     """In-memory structured signal store with short leases."""
 
     def __init__(self, signals: list[Signal] | None = None) -> None:
-        self._signals: list[Signal] = list(signals or [])
+        self._signals: list[Signal] = copy.deepcopy(signals or [])
         self._leases: dict[str, Lease] = {}
 
     def post(self, signal: Signal) -> Signal:

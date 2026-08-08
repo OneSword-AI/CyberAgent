@@ -40,6 +40,8 @@ def publish_specialist_results(state: ChallengeState) -> ChallengeState:
 def _result_signal(
     state: ChallengeState,
     result: SpecialistResult,
+    *,
+    parent_ids: list[str] | None = None,
 ) -> dict:
     return make_signal(
         type="specialist_result",
@@ -55,5 +57,16 @@ def _result_signal(
             **({"error": result["error"]} if "error" in result else {}),
         },
         provenance="direct_tool" if result["tool_outputs"] else "inference",
+        parent_ids=parent_ids,
         recipients=["controller_agent"],
     )
+
+
+def make_specialist_result_signal(
+    state: ChallengeState,
+    result: SpecialistResult,
+    *,
+    parent_ids: list[str] | None = None,
+) -> dict:
+    """Create a blackboard signal for a normalized specialist result."""
+    return _result_signal(state, result, parent_ids=parent_ids)

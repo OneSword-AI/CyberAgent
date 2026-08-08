@@ -63,7 +63,7 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     trace_events = [event["event"] for event in result["trace"]]
     assert "challenge.fetch" in trace_events
     assert "llm.fallback" in trace_events
-    assert "agent.route" in trace_events
+    assert "blackboard.dispatch" in trace_events
     assert "specialist.receive" in trace_events
     assert "tool.output" in trace_events
     assert "flag.extract" in trace_events

@@ -31,7 +31,7 @@ def run_controller_agent(state: ChallengeState) -> ChallengeState:
     try:
         response = get_llm().invoke(build_controller_prompt(state))
         plan = parse_controller_response(str(response.content))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - controller must fall back on LLM/config/parser failures
         return fallback_controller_plan(state, exc)
 
     return _apply_plan(state, plan, event="controller.plan", error=None)
@@ -68,7 +68,7 @@ JSON 示例：
 def parse_controller_response(content: str) -> ControllerPlan:
     data = json.loads(_strip_json_code_fence(content))
     if not isinstance(data, dict):
-        raise ValueError("controller response must be a JSON object")
+        raise TypeError("controller response must be a JSON object")
     required = ("goal", "strategy", "predicted_categories", "complexity", "next_agents", "rationale", "stop_condition")
     missing = [key for key in required if key not in data]
     if missing:
@@ -114,9 +114,10 @@ def fallback_controller_plan(state: ChallengeState, error: Exception) -> Challen
 
 def _apply_plan(state: ChallengeState, plan: ControllerPlan, *, event: str, error: Exception | None) -> ChallengeState:
     decisions = dict(plan)
+    controller_round = state.get("controller_round", 0) + 1
     next_state: ChallengeState = {
         **state,
-        "controller_round": state.get("controller_round", 0) + 1,
+        "controller_round": controller_round,
         "plan": plan["strategy"],
         "plan_rationale": plan["rationale"],
         "controller_decisions": decisions,
@@ -125,15 +126,16 @@ def _apply_plan(state: ChallengeState, plan: ControllerPlan, *, event: str, erro
         "next_agents": plan["next_agents"],
         "stop_condition": plan["stop_condition"],
     }
-    feedback = make_signal(
-        type="feedback",
-        challenge_id=state.get("challenge_id", ""),
-        source="controller_agent",
-        payload={"goal": plan["goal"], "strategy": plan["strategy"], "next_agents": plan["next_agents"]},
-        provenance="inference",
-        recipients=plan["next_agents"],
-    )
-    next_state["signals"] = [*state.get("signals", []), feedback]
+    if controller_round <= state.get("max_controller_rounds", 2):
+        feedback = make_signal(
+            type="feedback",
+            challenge_id=state.get("challenge_id", ""),
+            source="controller_agent",
+            payload={"goal": plan["goal"], "strategy": plan["strategy"], "next_agents": plan["next_agents"]},
+            provenance="inference",
+            recipients=plan["next_agents"],
+        )
+        next_state["signals"] = [*state.get("signals", []), feedback]
     next_state = add_trace_event(next_state, node="controller_agent", event=event, details=decisions | ({"error": str(error)} if error else {}))
     return add_finding(
         next_state,

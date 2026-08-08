@@ -2,18 +2,15 @@ from collections.abc import Callable
 from typing import Any
 
 from langgraph.graph import END, StateGraph
-from langgraph.types import Send
 
 from cyberagent.agents.attachment_downloader import download_attachments
+from cyberagent.agents.blackboard_specialists import run_blackboard_specialists
 from cyberagent.agents.controller import run_controller_agent
 from cyberagent.agents.evidence_gate import run_evidence_gate
 from cyberagent.agents.flag_extractor import extract_candidate_flags
 from cyberagent.agents.flag_verifier import verify_flag
 from cyberagent.agents.foundation_node import run_foundation_agents
-from cyberagent.agents.registry import SPECIALIST_NODES, SPECIALIST_ORDER
 from cyberagent.agents.retry import retry_agent
-from cyberagent.agents.router import route_agent
-from cyberagent.agents.specialist_signals import publish_specialist_results
 from cyberagent.models import ChallengeState
 from cyberagent.providers import fetch_challenge
 
@@ -25,13 +22,7 @@ def build_graph():
     graph.add_node("download_attachments", _as_delta_node(download_attachments))
     graph.add_node("foundation_agents", _as_delta_node(run_foundation_agents))
     graph.add_node("controller_agent", _as_delta_node(run_controller_agent))
-    graph.add_node("route_agent", _as_delta_node(route_agent))
-    for agent_name, agent_node in SPECIALIST_NODES.items():
-        graph.add_node(agent_name, _as_delta_node(agent_node))
-    graph.add_node(
-        "publish_specialist_results",
-        _as_delta_node(publish_specialist_results),
-    )
+    graph.add_node("blackboard_specialists", _as_delta_node(run_blackboard_specialists))
     graph.add_node("extract_candidate_flags", _as_delta_node(extract_candidate_flags))
     graph.add_node("evidence_gate", _as_delta_node(run_evidence_gate))
     graph.add_node("verify_flag", _as_delta_node(verify_flag))
@@ -45,14 +36,11 @@ def build_graph():
         "controller_agent",
         _controller_route,
         {
-            "dispatch": "route_agent",
+            "dispatch": "blackboard_specialists",
             "evaluate": "extract_candidate_flags",
         },
     )
-    graph.add_conditional_edges("route_agent", _specialist_routes)
-    for agent_name in SPECIALIST_ORDER:
-        graph.add_edge(agent_name, "publish_specialist_results")
-    graph.add_edge("publish_specialist_results", "controller_agent")
+    graph.add_edge("blackboard_specialists", "controller_agent")
     graph.add_edge("extract_candidate_flags", "evidence_gate")
     graph.add_conditional_edges(
         "evidence_gate",
@@ -139,14 +127,9 @@ APPEND_FIELDS = {
     "failed_attempts",
     "tool_outputs",
     "trace",
-    "signals",
     "candidate_flag_records",
     "specialist_results",
 }
-
-
-def _specialist_routes(state: ChallengeState):
-    return [Send(agent_name, state) for agent_name in state.get("active_agents", [])]
 
 
 def _as_delta_node(node: Callable[[ChallengeState], ChallengeState]):
