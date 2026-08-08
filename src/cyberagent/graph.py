@@ -5,11 +5,11 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
 from cyberagent.agents.attachment_downloader import download_attachments
+from cyberagent.agents.controller import run_controller_agent
 from cyberagent.agents.evidence_gate import run_evidence_gate
 from cyberagent.agents.flag_extractor import extract_candidate_flags
 from cyberagent.agents.flag_verifier import verify_flag
 from cyberagent.agents.foundation_node import run_foundation_agents
-from cyberagent.agents.controller import run_controller_agent
 from cyberagent.agents.registry import SPECIALIST_NODES, SPECIALIST_ORDER
 from cyberagent.agents.retry import retry_agent
 from cyberagent.agents.router import route_agent
@@ -77,6 +77,7 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "controller_decisions": {},
         "stop_condition": "",
         "candidate_flags": [],
+        "specialist_results": [],
         "findings": [],
         "verification_results": [],
         "failed_attempts": [],
@@ -114,6 +115,7 @@ APPEND_FIELDS = {
     "tool_outputs",
     "trace",
     "signals",
+    "specialist_results",
 }
 
 

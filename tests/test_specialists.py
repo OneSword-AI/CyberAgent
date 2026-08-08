@@ -37,6 +37,8 @@ def test_specialist_adds_finding_when_active(monkeypatch):
     monkeypatch.setattr("cyberagent.agents.specialists.execute_tool", fake_execute_tool)
     result = web_agent(state)
 
+    assert result["agent"] == "web_agent"
+    assert result["status"] == "completed"
     assert result["findings"][-1]["agent"] == "web_agent"
     assert result["findings"][-1]["summary"] == "Web Agent received the challenge."
     assert result["tool_outputs"][-1]["caller"] == "web_agent"
@@ -56,7 +58,8 @@ def test_specialist_returns_state_when_inactive():
 
     result = web_agent(state)
 
-    assert result is state
+    assert result["agent"] == "web_agent"
+    assert result["status"] == "skipped"
     assert result["findings"] == []
 
 
@@ -89,6 +92,8 @@ def test_all_specialist_nodes_can_receive_challenge(monkeypatch):
 
         result = agent_func(state)
 
+        assert result["agent"] == agent_name
+        assert result["status"] == "completed"
         assert result["findings"][-1]["agent"] == agent_name
 
 
@@ -98,6 +103,7 @@ def test_web_agent_records_missing_target_tool_error():
 
     result = web_agent(state)
 
+    assert result["agent"] == "web_agent"
     assert result["tool_outputs"][-1]["tool"] == "http_get"
     assert result["tool_outputs"][-1]["ok"] is False
     assert result["tool_outputs"][-1]["error"] == "missing remote target"

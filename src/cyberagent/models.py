@@ -1,4 +1,4 @@
-from typing import Annotated, Any, NotRequired, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 
 def _append_list(left: list, right: list) -> list:
@@ -7,6 +7,23 @@ def _append_list(left: list, right: list) -> list:
 
 def _last(_left: Any, right: Any) -> Any:
     return right
+
+
+def _merge_unique(left: list, right: list) -> list:
+    return list(dict.fromkeys([*left, *right]))
+
+
+class SpecialistResult(TypedDict):
+    """Normalized result returned by every specialist Agent."""
+
+    agent: str
+    status: Literal["completed", "skipped", "failed"]
+    summary: str
+    findings: list[dict[str, Any]]
+    candidate_flags: list[str]
+    tool_outputs: list[dict[str, Any]]
+    next_actions: list[dict[str, Any]]
+    error: NotRequired[str]
 
 
 class ChallengeState(TypedDict):
@@ -25,7 +42,8 @@ class ChallengeState(TypedDict):
     plan_rationale: Annotated[str, _last]
     controller_decisions: Annotated[dict[str, Any], _last]
     stop_condition: Annotated[str, _last]
-    candidate_flags: Annotated[list[str], _last]
+    candidate_flags: Annotated[list[str], _merge_unique]
+    specialist_results: Annotated[list[SpecialistResult], _append_list]
     findings: Annotated[list[dict], _append_list]
     verification_results: Annotated[list[dict], _append_list]
     failed_attempts: Annotated[list[dict], _append_list]
