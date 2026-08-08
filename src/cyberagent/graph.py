@@ -12,6 +12,7 @@ from cyberagent.agents.flag_submitter import submit_flag
 from cyberagent.agents.flag_verifier import verify_flag
 from cyberagent.agents.foundation_node import run_foundation_agents
 from cyberagent.agents.retry import retry_agent
+from cyberagent.budget import initial_budget, initial_budget_usage
 from cyberagent.models import ChallengeState
 from cyberagent.providers import fetch_challenge
 
@@ -89,6 +90,9 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "controller_decisions": {},
         "controller_round": 0,
         "max_controller_rounds": 2,
+        "budget": initial_budget(),
+        "budget_usage": initial_budget_usage(),
+        "budget_exhausted": False,
         "stop_condition": "",
         "candidate_flags": [],
         "candidate_flag_records": [],
@@ -111,7 +115,7 @@ def initial_state(challenge_id: str) -> ChallengeState:
 def _verification_route(state: ChallengeState) -> str:
     if state.get("final_flag"):
         return "submit"
-    if state.get("retry_count", 0) < state.get("max_retries", 1):
+    if not state.get("budget_exhausted") and state.get("retry_count", 0) < state.get("max_retries", 1):
         return "retry"
     return "end"
 
@@ -119,7 +123,11 @@ def _verification_route(state: ChallengeState) -> str:
 def _submission_route(state: ChallengeState) -> str:
     if state.get("remote_accepted_flag"):
         return "end"
-    if _latest_submission_rejected(state) and state.get("retry_count", 0) < state.get("max_retries", 1):
+    if (
+        not state.get("budget_exhausted")
+        and _latest_submission_rejected(state)
+        and state.get("retry_count", 0) < state.get("max_retries", 1)
+    ):
         return "retry"
     return "end"
 
@@ -132,6 +140,8 @@ def _latest_submission_rejected(state: ChallengeState) -> bool:
 
 
 def _controller_route(state: ChallengeState) -> str:
+    if state.get("budget_exhausted"):
+        return "evaluate"
     if state.get("final_flag"):
         return "evaluate"
     if state.get("controller_round", 0) <= state.get("max_controller_rounds", 2):
@@ -142,7 +152,7 @@ def _controller_route(state: ChallengeState) -> str:
 def _evidence_gate_route(state: ChallengeState) -> str:
     if state.get("evidence_gate_passed"):
         return "verify"
-    if state.get("retry_count", 0) < state.get("max_retries", 1):
+    if not state.get("budget_exhausted") and state.get("retry_count", 0) < state.get("max_retries", 1):
         return "retry"
     return "end"
 

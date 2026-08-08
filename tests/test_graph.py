@@ -128,6 +128,49 @@ def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
     assert result["controller_round"] == 3
 
 
+def test_graph_stops_dispatch_when_budget_is_exhausted(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_execute_tool(name: str, request: dict, *, caller: str):
+        calls.append(request["url"])
+        return {
+            "tool": "http_get",
+            "ok": True,
+            "output": "no flag here",
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"url": request["url"]},
+        }
+
+    challenge_dir = tmp_path / "challenges"
+    challenge_dir.mkdir()
+    (challenge_dir / "web03.json").write_text(
+        json.dumps(
+            {
+                "title": "login trail",
+                "description": "A web login page leaks SQL errors during authentication.",
+                "remote_targets": ["http://web.example.test"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("CHALLENGE_PROVIDER", "local_json")
+    monkeypatch.setenv("CHALLENGE_LOCAL_JSON_DIR", str(challenge_dir))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr("cyberagent.agents.specialists.execute_tool", fake_execute_tool)
+
+    state = initial_state("web03")
+    state["budget"] = {**state["budget"], "max_http_requests": 1}
+    result = build_graph().invoke(state)
+
+    assert calls == ["http://web.example.test"]
+    assert result["budget_exhausted"] is True
+    assert result["retry_count"] == 0
+    trace_events = [event["event"] for event in result["trace"]]
+    assert "budget.exhausted" in trace_events
+
+
 def test_graph_dispatches_multiple_specialists_with_send(tmp_path, monkeypatch):
     def fake_execute_tool(name: str, request: dict, *, caller: str):
         return {

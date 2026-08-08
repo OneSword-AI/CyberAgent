@@ -125,6 +125,38 @@ def test_attachment_analysis_adapter_runs_basic_file_tools():
     assert result["findings"][0]["summary"] == "Analyzed attachment archive.zip."
 
 
+def test_attachment_analysis_adapter_stops_shell_when_budget_is_exhausted():
+    calls = []
+
+    def fake_tool_executor(name: str, request: dict, *, caller: str) -> dict:
+        calls.append(request["command"])
+        return {
+            "tool": "shell",
+            "ok": True,
+            "output": "ASCII text",
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"command": request["command"]},
+        }
+
+    state = initial_state("attachment-budget")
+    state["budget"] = {**state["budget"], "max_shell_commands": 1}
+    state["downloaded_attachments"] = [
+        {
+            "source": "note.txt",
+            "path": "/tmp/note.txt",
+            "ok": True,
+            "error": None,
+        }
+    ]
+
+    result = AttachmentAnalysisAdapter(tool_executor=fake_tool_executor).execute(state)
+
+    assert calls == ["file -b /tmp/note.txt"]
+    assert result["tool_outputs"][1]["metadata"]["budget_denied"] is True
+    assert result["tool_outputs"][1]["tool"] == "shell"
+
+
 def test_misc_agent_attachment_results_publish_to_blackboard():
     def fake_tool_executor(name: str, request: dict, *, caller: str) -> dict:
         return {
@@ -209,3 +241,29 @@ def test_web_adapter_probes_paths_and_extracts_response_signals():
         "id",
         "debug",
     ]
+
+
+def test_web_adapter_stops_requests_when_http_budget_is_exhausted():
+    calls = []
+
+    def fake_tool_executor(name: str, request: dict, *, caller: str) -> dict:
+        calls.append(request["url"])
+        return {
+            "tool": "http_get",
+            "ok": True,
+            "output": "ok",
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"url": request["url"]},
+        }
+
+    state = initial_state("web-budget")
+    state["remote_targets"] = ["http://web.test/"]
+    state["budget"] = {**state["budget"], "max_http_requests": 2}
+
+    result = WebToolAdapter(tool_executor=fake_tool_executor).execute(state)
+
+    assert calls == ["http://web.test/", "http://web.test/robots.txt"]
+    assert len(result["tool_outputs"]) == 5
+    assert result["tool_outputs"][2]["metadata"]["budget_denied"] is True
+    assert result["tool_outputs"][2]["error"] == "budget denied: max_http_requests exhausted"

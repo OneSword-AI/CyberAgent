@@ -4,6 +4,7 @@ from cyberagent.agents.tool_adapters import (
     SpecialistToolAdapterRegistry,
     build_default_specialist_adapters,
 )
+from cyberagent.budget import record_tool_budget_usage
 from cyberagent.models import ChallengeState, SpecialistResult
 from cyberagent.tools import execute_tool
 from cyberagent.trace import add_trace_event
@@ -70,6 +71,7 @@ def apply_specialist_result(
             result,
         ],
     }
+    next_state = record_tool_budget_usage(next_state, result["tool_outputs"])
     next_state = add_trace_event(
         next_state,
         node=result["agent"],

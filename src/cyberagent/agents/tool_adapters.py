@@ -5,6 +5,11 @@ from shlex import quote
 from typing import Any, Protocol, TypedDict, runtime_checkable
 from urllib.parse import urljoin
 
+from cyberagent.budget import (
+    budget_allows_tool,
+    budget_denied_tool_result,
+    budget_exhaustion_reason,
+)
 from cyberagent.flag import extract_flags, merge_candidate_flags
 from cyberagent.models import ChallengeState
 from cyberagent.tools import ToolResult, execute_tool
@@ -60,7 +65,12 @@ class WebToolAdapter:
             }
 
         urls = _web_probe_urls(target, self.probe_paths)
-        tool_outputs = [self._http_get(url) for url in urls]
+        budget_state = state
+        tool_outputs = []
+        for url in urls:
+            output = self._http_get(url, budget_state)
+            tool_outputs.append(output)
+            budget_state = _count_local_budget_use(budget_state, output)
         candidate_flags: list[str] = []
         findings: list[dict[str, Any]] = []
         forms: list[dict[str, Any]] = []
@@ -99,7 +109,12 @@ class WebToolAdapter:
             "next_actions": [],
         }
 
-    def _http_get(self, url: str) -> dict[str, Any]:
+    def _http_get(self, url: str, state: ChallengeState) -> dict[str, Any]:
+        if not budget_allows_tool(state, "http_get"):
+            return _tool_output(
+                budget_denied_tool_result("http_get", budget_exhaustion_reason(state, "http_get")),
+                caller="web_agent",
+            )
         return _tool_output(
             self._tool_executor("http_get", {"url": url}, caller="web_agent"),
             caller="web_agent",
@@ -177,9 +192,11 @@ class AttachmentAnalysisAdapter:
 
         tool_outputs: list[dict[str, Any]] = []
         findings: list[dict[str, Any]] = []
+        budget_state = state
         for attachment in attachments:
             path = str(attachment["path"])
-            file_output = self._run_shell(f"file -b {quote(path)}")
+            file_output = self._run_shell(f"file -b {quote(path)}", budget_state)
+            budget_state = _count_local_budget_use(budget_state, file_output)
             file_output["metadata"] = {
                 **file_output.get("metadata", {}),
                 "analysis": "file",
@@ -187,7 +204,8 @@ class AttachmentAnalysisAdapter:
             }
             tool_outputs.append(file_output)
 
-            strings_output = self._run_shell(f"strings -n 4 {quote(path)} | head -200")
+            strings_output = self._run_shell(f"strings -n 4 {quote(path)} | head -200", budget_state)
+            budget_state = _count_local_budget_use(budget_state, strings_output)
             strings_output["metadata"] = {
                 **strings_output.get("metadata", {}),
                 "analysis": "strings",
@@ -196,7 +214,8 @@ class AttachmentAnalysisAdapter:
             tool_outputs.append(strings_output)
 
             if _looks_like_zip(path, file_output.get("output", "")):
-                unzip_output = self._run_shell(f"unzip -l {quote(path)}")
+                unzip_output = self._run_shell(f"unzip -l {quote(path)}", budget_state)
+                budget_state = _count_local_budget_use(budget_state, unzip_output)
                 unzip_output["metadata"] = {
                     **unzip_output.get("metadata", {}),
                     "analysis": "unzip_list",
@@ -224,7 +243,12 @@ class AttachmentAnalysisAdapter:
             "next_actions": [],
         }
 
-    def _run_shell(self, command: str) -> dict[str, Any]:
+    def _run_shell(self, command: str, state: ChallengeState) -> dict[str, Any]:
+        if not budget_allows_tool(state, "shell"):
+            return _tool_output(
+                budget_denied_tool_result("shell", budget_exhaustion_reason(state, "shell")),
+                caller="misc_agent",
+            )
         return _tool_output(
             self._tool_executor("shell", {"command": command}, caller="misc_agent"),
             caller="misc_agent",
@@ -298,6 +322,19 @@ def _tool_output(result: ToolResult, *, caller: str) -> dict[str, Any]:
 def _looks_like_zip(path: str, file_output: str) -> bool:
     suffix = Path(path).suffix.lower()
     return suffix == ".zip" or "zip archive" in file_output.lower()
+
+
+def _count_local_budget_use(state: ChallengeState, output: dict[str, Any]) -> ChallengeState:
+    usage = dict(state.get("budget_usage", {}))
+    tool = output.get("tool", "")
+    if output.get("metadata", {}).get("budget_denied"):
+        return state
+    usage["tool_calls"] = usage.get("tool_calls", 0) + 1
+    if tool.startswith("http_"):
+        usage["http_requests"] = usage.get("http_requests", 0) + 1
+    if tool == "shell":
+        usage["shell_commands"] = usage.get("shell_commands", 0) + 1
+    return {**state, "budget_usage": usage}
 
 
 def _web_probe_urls(target: str, paths: tuple[str, ...]) -> list[str]:
