@@ -104,16 +104,22 @@ def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
 
     result = build_graph().invoke(initial_state("web02"))
 
-    assert calls == ["http://web.example.test", "http://web.example.test"]
+    assert calls == [
+        "http://web.example.test",
+        "http://web.example.test",
+        "http://web.example.test",
+        "http://web.example.test",
+    ]
     assert result["candidate_flags"] == []
     assert "final_flag" not in result
     assert result["retry_count"] == 1
     assert result["failed_attempts"][-1]["reason"] == "no valid flag accepted"
     trace_events = [event["event"] for event in result["trace"]]
     assert trace_events.count("retry.schedule") == 1
-    assert trace_events.count("llm.fallback") == 2
+    assert trace_events.count("llm.fallback") == 6
     assert result["failed_attempts"][-1]["plan"]
     assert result["failed_attempts"][-1]["active_agents"] == ["web_agent"]
+    assert result["controller_round"] == 3
 
 
 def test_graph_dispatches_multiple_specialists_with_send(tmp_path, monkeypatch):
@@ -153,3 +159,6 @@ def test_graph_dispatches_multiple_specialists_with_send(tmp_path, monkeypatch):
     finding_agents = [finding["agent"] for finding in result["findings"]]
     assert "web_agent" in finding_agents
     assert "crypto_agent" in finding_agents
+    signal_types = [signal["type"] for signal in result["signals"]]
+    assert signal_types.count("specialist_result") == 4
+    assert result["controller_round"] == 3

@@ -11,6 +11,7 @@ SignalType = Literal[
     "memory_prior",
     "critic_report",
     "feedback",
+    "specialist_result",
 ]
 SignalStatus = Literal["pending", "processing", "processed", "failed"]
 

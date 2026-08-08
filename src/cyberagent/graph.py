@@ -13,6 +13,7 @@ from cyberagent.agents.foundation_node import run_foundation_agents
 from cyberagent.agents.registry import SPECIALIST_NODES, SPECIALIST_ORDER
 from cyberagent.agents.retry import retry_agent
 from cyberagent.agents.router import route_agent
+from cyberagent.agents.specialist_signals import publish_specialist_results
 from cyberagent.models import ChallengeState
 from cyberagent.providers import fetch_challenge
 
@@ -27,6 +28,10 @@ def build_graph():
     graph.add_node("route_agent", _as_delta_node(route_agent))
     for agent_name, agent_node in SPECIALIST_NODES.items():
         graph.add_node(agent_name, _as_delta_node(agent_node))
+    graph.add_node(
+        "publish_specialist_results",
+        _as_delta_node(publish_specialist_results),
+    )
     graph.add_node("extract_candidate_flags", _as_delta_node(extract_candidate_flags))
     graph.add_node("evidence_gate", _as_delta_node(run_evidence_gate))
     graph.add_node("verify_flag", _as_delta_node(verify_flag))
@@ -36,10 +41,18 @@ def build_graph():
     graph.add_edge("fetch_challenge", "download_attachments")
     graph.add_edge("download_attachments", "foundation_agents")
     graph.add_edge("foundation_agents", "controller_agent")
-    graph.add_edge("controller_agent", "route_agent")
+    graph.add_conditional_edges(
+        "controller_agent",
+        _controller_route,
+        {
+            "dispatch": "route_agent",
+            "evaluate": "extract_candidate_flags",
+        },
+    )
     graph.add_conditional_edges("route_agent", _specialist_routes)
     for agent_name in SPECIALIST_ORDER:
-        graph.add_edge(agent_name, "extract_candidate_flags")
+        graph.add_edge(agent_name, "publish_specialist_results")
+    graph.add_edge("publish_specialist_results", "controller_agent")
     graph.add_edge("extract_candidate_flags", "evidence_gate")
     graph.add_conditional_edges(
         "evidence_gate",
@@ -75,9 +88,12 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "plan": "",
         "plan_rationale": "",
         "controller_decisions": {},
+        "controller_round": 0,
+        "max_controller_rounds": 2,
         "stop_condition": "",
         "candidate_flags": [],
         "specialist_results": [],
+        "published_specialist_results": 0,
         "findings": [],
         "verification_results": [],
         "failed_attempts": [],
@@ -97,6 +113,14 @@ def _verification_route(state: ChallengeState) -> str:
     if state.get("retry_count", 0) < state.get("max_retries", 1):
         return "retry"
     return "end"
+
+
+def _controller_route(state: ChallengeState) -> str:
+    if state.get("final_flag"):
+        return "evaluate"
+    if state.get("controller_round", 0) <= state.get("max_controller_rounds", 2):
+        return "dispatch"
+    return "evaluate"
 
 
 def _evidence_gate_route(state: ChallengeState) -> str:

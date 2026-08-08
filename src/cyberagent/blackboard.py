@@ -14,8 +14,8 @@ class Lease:
 class Blackboard:
     """In-memory structured signal store with short leases."""
 
-    def __init__(self) -> None:
-        self._signals: list[Signal] = []
+    def __init__(self, signals: list[Signal] | None = None) -> None:
+        self._signals: list[Signal] = list(signals or [])
         self._leases: dict[str, Lease] = {}
 
     def post(self, signal: Signal) -> Signal:
@@ -109,6 +109,10 @@ class Blackboard:
 
     def release_lease(self, *, signal_id: str) -> None:
         self._leases.pop(signal_id, None)
+
+    def snapshot(self) -> list[Signal]:
+        """Return the current signal collection for persistence in graph state."""
+        return list(self._signals)
 
     def lease(self, *, signal_id: str) -> Lease | None:
         lease = self._leases.get(signal_id)

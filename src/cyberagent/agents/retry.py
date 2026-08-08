@@ -17,6 +17,7 @@ def retry_agent(state: ChallengeState) -> ChallengeState:
     next_state: ChallengeState = {
         **state,
         "retry_count": retry_count,
+        "controller_round": 0,
         "failed_attempts": [*state.get("failed_attempts", []), failed_attempt],
     }
     next_state = add_trace_event(

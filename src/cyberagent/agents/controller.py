@@ -116,6 +116,7 @@ def _apply_plan(state: ChallengeState, plan: ControllerPlan, *, event: str, erro
     decisions = dict(plan)
     next_state: ChallengeState = {
         **state,
+        "controller_round": state.get("controller_round", 0) + 1,
         "plan": plan["strategy"],
         "plan_rationale": plan["rationale"],
         "controller_decisions": decisions,
