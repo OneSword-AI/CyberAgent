@@ -1,37 +1,20 @@
 from typing import Any, Literal
 
+from cyberagent.agents.tool_adapters import (
+    SpecialistToolAdapterRegistry,
+    build_default_specialist_adapters,
+)
 from cyberagent.models import ChallengeState, SpecialistResult
-from cyberagent.tools import ToolResult, execute_tool
+from cyberagent.tools import execute_tool
 from cyberagent.trace import add_trace_event
 
 
-def web_agent(state: ChallengeState) -> SpecialistResult:
-    if not _is_active(state, "web_agent"):
-        return _skipped("web_agent", "Web Agent was not selected for this challenge.")
-
-    target = _first_remote_target(state)
-    result = (
-        execute_tool("http_get", {"url": target}, caller="web_agent")
-        if target
-        else _missing_target_result()
-    )
-    output = _tool_output(result, caller="web_agent")
-    return _completed(
-        "web_agent",
-        "Web Agent inspected the first remote target.",
-        findings=[
-            _finding(
-                "web_agent",
-                "Web Agent received the challenge.",
-                {
-                    "title": state.get("title", ""),
-                    "predicted_categories": state.get("predicted_categories", []),
-                    "active_agents": state.get("active_agents", []),
-                },
-            )
-        ],
-        tool_outputs=[output],
-    )
+def web_agent(
+    state: ChallengeState,
+    *,
+    adapters: SpecialistToolAdapterRegistry | None = None,
+) -> SpecialistResult:
+    return _run_with_adapter(state, "web_agent", "Web Agent", "web", adapters)
 
 
 def pwn_agent(state: ChallengeState) -> SpecialistResult:
@@ -42,12 +25,20 @@ def reverse_agent(state: ChallengeState) -> SpecialistResult:
     return _placeholder_agent(state, "reverse_agent", "Reverse Agent")
 
 
-def crypto_agent(state: ChallengeState) -> SpecialistResult:
-    return _placeholder_agent(state, "crypto_agent", "Crypto Agent")
+def crypto_agent(
+    state: ChallengeState,
+    *,
+    adapters: SpecialistToolAdapterRegistry | None = None,
+) -> SpecialistResult:
+    return _run_with_adapter(state, "crypto_agent", "Crypto Agent", "crypto", adapters)
 
 
-def misc_agent(state: ChallengeState) -> SpecialistResult:
-    return _placeholder_agent(state, "misc_agent", "Misc Agent")
+def misc_agent(
+    state: ChallengeState,
+    *,
+    adapters: SpecialistToolAdapterRegistry | None = None,
+) -> SpecialistResult:
+    return _run_with_adapter(state, "misc_agent", "Misc Agent", "misc", adapters)
 
 
 def forensics_agent(state: ChallengeState) -> SpecialistResult:
@@ -141,6 +132,49 @@ def _placeholder_agent(
     )
 
 
+def _run_with_adapter(
+    state: ChallengeState,
+    agent_name: str,
+    display_name: str,
+    adapter_name: str,
+    adapters: SpecialistToolAdapterRegistry | None,
+) -> SpecialistResult:
+    if not _is_active(state, agent_name):
+        return _skipped(agent_name, f"{display_name} was not selected for this challenge.")
+
+    registry = adapters or build_default_specialist_adapters(tool_executor=execute_tool)
+    try:
+        adapter_result = registry.get(adapter_name).execute(state)
+    except Exception as exc:  # noqa: BLE001 - adapter failures become structured results
+        return _completed(
+            agent_name,
+            f"{display_name} adapter failed.",
+            status="failed",
+            error=str(exc),
+        )
+
+    return _completed(
+        agent_name,
+        adapter_result["summary"],
+        findings=[
+            _finding(
+                agent_name,
+                f"{display_name} received the challenge.",
+                {
+                    "title": state.get("title", ""),
+                    "predicted_categories": state.get("predicted_categories", []),
+                    "active_agents": state.get("active_agents", []),
+                    "adapter": adapter_name,
+                },
+            ),
+            *adapter_result["findings"],
+        ],
+        candidate_flags=adapter_result["candidate_flags"],
+        tool_outputs=adapter_result["tool_outputs"],
+        next_actions=adapter_result["next_actions"],
+    )
+
+
 def _is_active(state: ChallengeState, agent_name: str) -> bool:
     return agent_name in state.get("active_agents", [])
 
@@ -158,8 +192,9 @@ def _completed(
     candidate_flags: list[str] | None = None,
     tool_outputs: list[dict[str, Any]] | None = None,
     next_actions: list[dict[str, Any]] | None = None,
+    error: str | None = None,
 ) -> SpecialistResult:
-    return {
+    result: SpecialistResult = {
         "agent": agent,
         "status": status,
         "summary": summary,
@@ -168,6 +203,9 @@ def _completed(
         "tool_outputs": tool_outputs or [],
         "next_actions": next_actions or [],
     }
+    if error is not None:
+        result["error"] = error
+    return result
 
 
 def _finding(agent: str, summary: str, evidence: dict[str, Any]) -> dict[str, Any]:
@@ -176,34 +214,4 @@ def _finding(agent: str, summary: str, evidence: dict[str, Any]) -> dict[str, An
         "agent": agent,
         "summary": summary,
         "evidence": evidence,
-    }
-
-
-def _tool_output(result: ToolResult, *, caller: str) -> dict[str, Any]:
-    return {
-        "caller": caller,
-        "tool": result["tool"],
-        "ok": result["ok"],
-        "output": result["output"],
-        "error": result["error"],
-        "exit_code": result["exit_code"],
-        "metadata": result.get("metadata", {}),
-    }
-
-
-def _first_remote_target(state: ChallengeState) -> str:
-    for target in state.get("remote_targets", []):
-        if isinstance(target, str) and target.strip():
-            return target.strip()
-    return ""
-
-
-def _missing_target_result() -> ToolResult:
-    return {
-        "tool": "http_get",
-        "ok": False,
-        "output": "",
-        "error": "missing remote target",
-        "exit_code": None,
-        "metadata": {"url": ""},
     }
