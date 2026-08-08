@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from pathlib import Path
+from shlex import quote
 from typing import Any, Protocol, TypedDict, runtime_checkable
 
 from cyberagent.models import ChallengeState
@@ -90,6 +92,99 @@ class PlaceholderToolAdapter:
         }
 
 
+class AttachmentAnalysisAdapter:
+    name = "misc"
+
+    def __init__(
+        self,
+        *,
+        tool_executor: Callable[..., ToolResult] = execute_tool,
+    ) -> None:
+        self._tool_executor = tool_executor
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": "Analyze downloaded attachments with basic file, strings, and unzip listing commands.",
+            "capabilities": ["file", "strings", "unzip_list"],
+        }
+
+    def execute(self, state: ChallengeState) -> SpecialistAdapterResult:
+        attachments = [
+            item
+            for item in state.get("downloaded_attachments", [])
+            if item.get("ok") and item.get("path")
+        ]
+        if not attachments:
+            return {
+                "summary": "Misc Adapter found no downloaded attachments to analyze.",
+                "findings": [],
+                "candidate_flags": [],
+                "tool_outputs": [],
+                "next_actions": [
+                    {
+                        "kind": "attachment",
+                        "reason": "no downloaded attachments available",
+                    }
+                ],
+            }
+
+        tool_outputs: list[dict[str, Any]] = []
+        findings: list[dict[str, Any]] = []
+        for attachment in attachments:
+            path = str(attachment["path"])
+            file_output = self._run_shell(f"file -b {quote(path)}")
+            file_output["metadata"] = {
+                **file_output.get("metadata", {}),
+                "analysis": "file",
+                "path": path,
+            }
+            tool_outputs.append(file_output)
+
+            strings_output = self._run_shell(f"strings -n 4 {quote(path)} | head -200")
+            strings_output["metadata"] = {
+                **strings_output.get("metadata", {}),
+                "analysis": "strings",
+                "path": path,
+            }
+            tool_outputs.append(strings_output)
+
+            if _looks_like_zip(path, file_output.get("output", "")):
+                unzip_output = self._run_shell(f"unzip -l {quote(path)}")
+                unzip_output["metadata"] = {
+                    **unzip_output.get("metadata", {}),
+                    "analysis": "unzip_list",
+                    "path": path,
+                }
+                tool_outputs.append(unzip_output)
+
+            findings.append(
+                {
+                    "kind": "finding",
+                    "agent": "misc_agent",
+                    "summary": f"Analyzed attachment {Path(path).name}.",
+                    "evidence": {
+                        "path": path,
+                        "file_type": file_output.get("output", "").strip(),
+                    },
+                }
+            )
+
+        return {
+            "summary": f"Misc Adapter analyzed {len(attachments)} downloaded attachment(s).",
+            "findings": findings,
+            "candidate_flags": [],
+            "tool_outputs": tool_outputs,
+            "next_actions": [],
+        }
+
+    def _run_shell(self, command: str) -> dict[str, Any]:
+        return _tool_output(
+            self._tool_executor("shell", {"command": command}, caller="misc_agent"),
+            caller="misc_agent",
+        )
+
+
 class SpecialistToolAdapterRegistry:
     def __init__(self, adapters: list[SpecialistToolAdapter] | None = None) -> None:
         self._adapters: dict[str, SpecialistToolAdapter] = {}
@@ -119,7 +214,7 @@ def build_default_specialist_adapters(
         [
             WebToolAdapter(tool_executor=tool_executor),
             PlaceholderToolAdapter("crypto", "Crypto"),
-            PlaceholderToolAdapter("misc", "Misc"),
+            AttachmentAnalysisAdapter(tool_executor=tool_executor),
         ]
     )
 
@@ -152,3 +247,8 @@ def _tool_output(result: ToolResult, *, caller: str) -> dict[str, Any]:
         "exit_code": result["exit_code"],
         "metadata": result.get("metadata", {}),
     }
+
+
+def _looks_like_zip(path: str, file_output: str) -> bool:
+    suffix = Path(path).suffix.lower()
+    return suffix == ".zip" or "zip archive" in file_output.lower()
