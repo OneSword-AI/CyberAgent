@@ -34,3 +34,26 @@ def test_verify_flag_records_no_acceptance():
     assert "final_flag" not in result
     assert result["verification_results"][-1]["valid"] is False
     assert result["trace"][-1]["event"] == "flag.verify"
+
+
+def test_verify_flag_records_candidate_evidence_reference():
+    state = initial_state("1")
+    state["candidate_flags"] = ["flag{demo}"]
+    state["candidate_flag_records"] = [
+        {
+            "flag": "flag{demo}",
+            "source_type": "tool_output",
+            "source_index": 0,
+            "source_field": "output",
+            "source_agent": "web_agent",
+            "source_tool": "http_get",
+            "evidence_signal_id": "evidence-1",
+        }
+    ]
+
+    result = verify_flag(state)
+
+    verification = result["verification_results"][-1]
+    assert verification["evidence_signal_id"] == "evidence-1"
+    assert verification["source_agent"] == "web_agent"
+    assert verification["source_tool"] == "http_get"

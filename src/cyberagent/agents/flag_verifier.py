@@ -8,7 +8,13 @@ from cyberagent.trace import add_trace_event
 
 def verify_flag(state: ChallengeState) -> ChallengeState:
     """Verify candidate flags locally using format rules."""
-    results = [_verify_one(flag, state.get("flag_format")) for flag in state.get("candidate_flags", [])]
+    results = [
+        _with_candidate_record(
+            _verify_one(flag, state.get("flag_format")),
+            state.get("candidate_flag_records", []),
+        )
+        for flag in state.get("candidate_flags", [])
+    ]
     accepted = next((result["flag"] for result in results if result["valid"]), None)
 
     next_state: ChallengeState = {
@@ -55,4 +61,19 @@ def _verify_one(flag: str, flag_format: str | None) -> dict:
         "valid": valid,
         "method": "default_pattern",
         "reason": "matches default pattern" if valid else "does not match default pattern",
+    }
+
+
+def _with_candidate_record(result: dict, records: list[dict]) -> dict:
+    record = next((item for item in records if item.get("flag") == result["flag"]), None)
+    if record is None:
+        return result
+    return {
+        **result,
+        "evidence_signal_id": record.get("evidence_signal_id"),
+        "source_type": record.get("source_type"),
+        "source_index": record.get("source_index"),
+        "source_field": record.get("source_field"),
+        "source_agent": record.get("source_agent"),
+        "source_tool": record.get("source_tool"),
     }

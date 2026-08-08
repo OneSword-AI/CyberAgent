@@ -55,3 +55,21 @@ def test_run_evidence_gate_blocks_without_direct_evidence():
     result = run_evidence_gate(state)
 
     assert result["evidence_gate_passed"] is False
+
+
+def test_run_evidence_gate_blocks_unproven_candidate_flag():
+    state = run_foundation_agents(initial_state("gate01"))
+    tool_result: ToolResult = {
+        "tool": "http_get",
+        "ok": True,
+        "output": "response body",
+        "error": None,
+        "exit_code": 0,
+    }
+    state = record_tool_output(state, tool_result, caller="web_agent")
+    state["candidate_flags"] = ["flag{unproven}"]
+
+    result = run_evidence_gate(state)
+
+    assert result["evidence_gate_passed"] is False
+    assert result["findings"][-1]["evidence"]["candidate_flag_chains_passed"] is False

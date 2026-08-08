@@ -92,6 +92,7 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "max_controller_rounds": 2,
         "stop_condition": "",
         "candidate_flags": [],
+        "candidate_flag_records": [],
         "specialist_results": [],
         "published_specialist_results": 0,
         "findings": [],
@@ -139,6 +140,7 @@ APPEND_FIELDS = {
     "tool_outputs",
     "trace",
     "signals",
+    "candidate_flag_records",
     "specialist_results",
 }
 

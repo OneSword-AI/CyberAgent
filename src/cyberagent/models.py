@@ -45,6 +45,7 @@ class ChallengeState(TypedDict):
     max_controller_rounds: Annotated[int, _last]
     stop_condition: Annotated[str, _last]
     candidate_flags: Annotated[list[str], _merge_unique]
+    candidate_flag_records: Annotated[list[dict[str, Any]], _append_list]
     specialist_results: Annotated[list[SpecialistResult], _append_list]
     published_specialist_results: Annotated[int, _last]
     findings: Annotated[list[dict], _append_list]
