@@ -1,8 +1,11 @@
+import re
 from collections.abc import Callable
 from pathlib import Path
 from shlex import quote
 from typing import Any, Protocol, TypedDict, runtime_checkable
+from urllib.parse import urljoin
 
+from cyberagent.flag import extract_flags, merge_candidate_flags
 from cyberagent.models import ChallengeState
 from cyberagent.tools import ToolResult, execute_tool
 
@@ -28,6 +31,7 @@ class SpecialistToolAdapter(Protocol):
 
 class WebToolAdapter:
     name = "web"
+    probe_paths = ("/robots.txt", "/.git/HEAD", "/admin", "/login")
 
     def __init__(
         self,
@@ -39,25 +43,67 @@ class WebToolAdapter:
     def describe(self) -> dict[str, Any]:
         return {
             "name": self.name,
-            "description": "Inspect the first configured HTTP/HTTPS challenge target.",
-            "capabilities": ["http_get"],
+            "description": "Perform bounded HTTP probing, path attempts, response flag extraction, and simple form/parameter discovery.",
+            "capabilities": ["http_get", "path_probe", "flag_extract", "form_detect", "parameter_detect"],
         }
 
     def execute(self, state: ChallengeState) -> SpecialistAdapterResult:
         target = _first_remote_target(state)
-        result = (
-            self._tool_executor("http_get", {"url": target}, caller="web_agent")
-            if target
-            else _missing_target_result()
-        )
-        output = _tool_output(result, caller="web_agent")
+        if not target:
+            output = _tool_output(_missing_target_result(), caller="web_agent")
+            return {
+                "summary": "Web Adapter could not run because no remote target is configured.",
+                "findings": [],
+                "candidate_flags": [],
+                "tool_outputs": [output],
+                "next_actions": [{"kind": "remote_target", "reason": "missing remote target"}],
+            }
+
+        urls = _web_probe_urls(target, self.probe_paths)
+        tool_outputs = [self._http_get(url) for url in urls]
+        candidate_flags: list[str] = []
+        findings: list[dict[str, Any]] = []
+        forms: list[dict[str, Any]] = []
+        parameters: list[dict[str, Any]] = []
+
+        for output in tool_outputs:
+            body = str(output.get("output", ""))
+            candidate_flags = merge_candidate_flags(
+                candidate_flags,
+                extract_flags(body, state.get("flag_format")),
+            )
+            url = str(output.get("metadata", {}).get("url", ""))
+            forms.extend(_detect_forms(body, url))
+            parameters.extend(_detect_parameters(body, url))
+
+        if forms:
+            findings.append(
+                _adapter_finding(
+                    "Detected simple HTML form(s).",
+                    {"forms": forms},
+                )
+            )
+        if parameters:
+            findings.append(
+                _adapter_finding(
+                    "Detected candidate URL parameter(s).",
+                    {"parameters": parameters},
+                )
+            )
+
         return {
-            "summary": "Web Adapter inspected the first remote target.",
-            "findings": [],
-            "candidate_flags": [],
-            "tool_outputs": [output],
+            "summary": f"Web Adapter probed {len(urls)} URL(s).",
+            "findings": findings,
+            "candidate_flags": candidate_flags,
+            "tool_outputs": tool_outputs,
             "next_actions": [],
         }
+
+    def _http_get(self, url: str) -> dict[str, Any]:
+        return _tool_output(
+            self._tool_executor("http_get", {"url": url}, caller="web_agent"),
+            caller="web_agent",
+        )
 
 
 class PlaceholderToolAdapter:
@@ -252,3 +298,79 @@ def _tool_output(result: ToolResult, *, caller: str) -> dict[str, Any]:
 def _looks_like_zip(path: str, file_output: str) -> bool:
     suffix = Path(path).suffix.lower()
     return suffix == ".zip" or "zip archive" in file_output.lower()
+
+
+def _web_probe_urls(target: str, paths: tuple[str, ...]) -> list[str]:
+    urls = [target]
+    for path in paths:
+        url = urljoin(target.rstrip("/") + "/", path.lstrip("/"))
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+def _detect_forms(body: str, page_url: str) -> list[dict[str, Any]]:
+    forms: list[dict[str, Any]] = []
+    for match in re.finditer(r"<form\b(?P<attrs>[^>]*)>", body, flags=re.IGNORECASE):
+        attrs = match.group("attrs")
+        forms.append(
+            {
+                "page": page_url,
+                "method": _html_attr(attrs, "method") or "get",
+                "action": _html_attr(attrs, "action") or page_url,
+                "inputs": _nearby_inputs(body, match.end()),
+            }
+        )
+    return forms
+
+
+def _nearby_inputs(body: str, start: int) -> list[str]:
+    end = body.find("</form>", start)
+    fragment = body[start : end if end != -1 else start + 2000]
+    names = [
+        match.group(1)
+        for match in re.finditer(
+            r"<input\b[^>]*\bname=[\"']?([^\"'\s>]+)",
+            fragment,
+            flags=re.IGNORECASE,
+        )
+    ]
+    return list(dict.fromkeys(names))
+
+
+def _detect_parameters(body: str, page_url: str) -> list[dict[str, Any]]:
+    parameters: list[dict[str, Any]] = []
+    for href in re.findall(r"\bhref=[\"']([^\"']+\?[^\"']+)[\"']", body, flags=re.IGNORECASE):
+        query = href.split("?", 1)[1].split("#", 1)[0]
+        names = [
+            item.split("=", 1)[0]
+            for item in query.split("&")
+            if item and item.split("=", 1)[0]
+        ]
+        if names:
+            parameters.append(
+                {
+                    "page": page_url,
+                    "href": href,
+                    "names": list(dict.fromkeys(names)),
+                }
+            )
+    return parameters
+
+
+def _html_attr(attrs: str, name: str) -> str:
+    match = re.search(
+        rf"\b{name}=[\"']?([^\"'\s>]+)",
+        attrs,
+        flags=re.IGNORECASE,
+    )
+    return match.group(1).lower() if match else ""
+
+
+def _adapter_finding(summary: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "finding",
+        "agent": "web_agent",
+        "summary": summary,
+        "evidence": evidence,
+    }

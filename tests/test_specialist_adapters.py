@@ -3,6 +3,7 @@ from cyberagent.agents.specialists import crypto_agent, misc_agent, web_agent
 from cyberagent.agents.tool_adapters import (
     AttachmentAnalysisAdapter,
     SpecialistToolAdapterRegistry,
+    WebToolAdapter,
     build_default_specialist_adapters,
 )
 from cyberagent.graph import initial_state
@@ -46,6 +47,10 @@ def test_default_specialist_adapters_expose_web_crypto_and_misc():
         "misc",
     }
     misc_description = next(item for item in descriptions if item["name"] == "misc")
+    web_description = next(item for item in descriptions if item["name"] == "web")
+    assert {"path_probe", "flag_extract", "form_detect", "parameter_detect"} <= set(
+        web_description["capabilities"]
+    )
     assert {"file", "strings", "unzip_list"} <= set(misc_description["capabilities"])
 
 
@@ -153,3 +158,54 @@ def test_misc_agent_attachment_results_publish_to_blackboard():
     assert signal["source"] == "misc_agent"
     assert signal["recipients"] == ["controller_agent"]
     assert signal["payload"]["tool_outputs"][0]["metadata"]["analysis"] == "file"
+
+
+def test_web_adapter_probes_paths_and_extracts_response_signals():
+    calls = []
+
+    def fake_tool_executor(name: str, request: dict, *, caller: str) -> dict:
+        calls.append((name, request["url"], caller))
+        body = ""
+        if request["url"] == "http://web.test/":
+            body = """
+            <form method="post" action="/login">
+              <input name="username">
+              <input name="password">
+            </form>
+            <a href="/item?id=1&debug=true">item</a>
+            """
+        if request["url"].endswith("/robots.txt"):
+            body = "flag{web_adapter}"
+        return {
+            "tool": "http_get",
+            "ok": True,
+            "output": body,
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"url": request["url"]},
+        }
+
+    state = initial_state("web-probe")
+    state["remote_targets"] = ["http://web.test/"]
+
+    result = WebToolAdapter(tool_executor=fake_tool_executor).execute(state)
+
+    assert [url for _, url, _ in calls] == [
+        "http://web.test/",
+        "http://web.test/robots.txt",
+        "http://web.test/.git/HEAD",
+        "http://web.test/admin",
+        "http://web.test/login",
+    ]
+    assert all(name == "http_get" and caller == "web_agent" for name, _, caller in calls)
+    assert result["candidate_flags"] == ["flag{web_adapter}"]
+    assert result["summary"] == "Web Adapter probed 5 URL(s)."
+    findings = {finding["summary"]: finding["evidence"] for finding in result["findings"]}
+    assert findings["Detected simple HTML form(s)."]["forms"][0]["inputs"] == [
+        "username",
+        "password",
+    ]
+    assert findings["Detected candidate URL parameter(s)."]["parameters"][0]["names"] == [
+        "id",
+        "debug",
+    ]

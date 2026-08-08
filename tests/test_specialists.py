@@ -13,7 +13,7 @@ from cyberagent.graph import initial_state
 def test_specialist_adds_finding_when_active(monkeypatch):
     def fake_execute_tool(name: str, request: dict, *, caller: str):
         assert name == "http_get"
-        assert request["url"] == "http://example.test"
+        assert request["url"].startswith("http://example.test")
         assert caller == "web_agent"
         return {
             "tool": "http_get",
@@ -41,9 +41,9 @@ def test_specialist_adds_finding_when_active(monkeypatch):
     assert result["status"] == "completed"
     assert result["findings"][-1]["agent"] == "web_agent"
     assert result["findings"][-1]["summary"] == "Web Agent received the challenge."
-    assert result["tool_outputs"][-1]["caller"] == "web_agent"
-    assert result["tool_outputs"][-1]["tool"] == "http_get"
-    assert result["tool_outputs"][-1]["ok"] is True
+    assert result["tool_outputs"][0]["caller"] == "web_agent"
+    assert result["tool_outputs"][0]["tool"] == "http_get"
+    assert result["tool_outputs"][0]["ok"] is True
 
 
 def test_specialist_returns_state_when_inactive():

@@ -104,11 +104,13 @@ def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
 
     result = build_graph().invoke(initial_state("web02"))
 
-    assert calls == [
+    assert len(calls) == 20
+    assert calls[:5] == [
         "http://web.example.test",
-        "http://web.example.test",
-        "http://web.example.test",
-        "http://web.example.test",
+        "http://web.example.test/robots.txt",
+        "http://web.example.test/.git/HEAD",
+        "http://web.example.test/admin",
+        "http://web.example.test/login",
     ]
     assert result["candidate_flags"] == []
     assert "final_flag" not in result
