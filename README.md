@@ -1,30 +1,98 @@
 # CyberAgent
 
-Fully Automated CTF Agent
+CyberAgent is a LangGraph-based CTF solving agent prototype. It reads challenge metadata from a pluggable provider, asks a controller Agent to plan the solving path, dispatches specialist Agents in parallel, publishes specialist results back to a blackboard signal stream, and then extracts/verifies candidate flags.
 
-## 开发说明
+## Current Architecture
 
-- 新特性：新建功能分支 → 提交 PR → 审核后合并。
-- `main` 分支已开启保护：禁止直接推送，所有改动必须通过 PR 合并。
-- 请不要一次性提交大量代码，请提交`原子化`的commit，[参考](https://www.conventionalcommits.org/zh-hans/v1.0.0/)
+```text
+fetch_challenge
+  -> download_attachments
+  -> foundation_agents
+  -> controller_agent
+  -> route_agent
+  -> Send(web/pwn/reverse/crypto/misc/forensics/other)
+  -> publish_specialist_results
+  -> controller_agent
+  -> ...bounded feedback rounds...
+  -> extract_candidate_flags
+  -> evidence_gate
+  -> verify_flag / retry_agent
+```
 
-**原因：**
+Key implementation points:
 
-- 分支隔离：在分支上开发，不干扰 `main` 上的稳定代码。
-- 代码审查：PR 强制审核，及早发现问题和风格不一致。
-- CI 检查：合并前跑测试，保证 `main` 始终可部署。
-- 可追溯：PR 记录改动历史，方便回溯问题。
-- 防止误操作：禁止直接推送，避免破坏主分支。
+- `controller_agent` uses an OpenAI-compatible LLM and falls back to rule classification when unavailable.
+- Specialist Agents return normalized `SpecialistResult` objects instead of mutating graph state directly.
+- Web, Crypto, and Misc call replaceable specialist tool Adapters; default Crypto/Misc adapters are MVP placeholders.
+- Specialist results are published as `specialist_result` blackboard signals for the controller to consume in the next planning round.
+- `max_controller_rounds` bounds feedback dispatch cycles; retry resets the controller round.
 
-## 环境配置
+## Project Layout
+
+```text
+src/cyberagent/
+├── graph.py                  # LangGraph workflow and initial ChallengeState
+├── models.py                 # ChallengeState and SpecialistResult contracts
+├── runtime.py                # run_challenge(...) runtime wrapper
+├── llm.py                    # OpenAI-compatible chat model configuration
+├── blackboard.py             # in-memory signal store and leases
+├── signals.py                # structured blackboard signal schema
+├── agents/                   # controller, router, specialists, evidence/flag nodes
+├── providers/                # challenge providers and normalization
+└── tools/                    # tool adapter registry and basic HTTP/shell/file tools
+```
+
+Tests live in `tests/`. Design notes and Excalidraw source live in `docs/` and `ARCHITECTURE.md`.
+
+## Setup
 
 ```bash
 uv sync
+cp .env.example .env
 ```
 
-## 大模型配置
+Run the CLI against a configured provider:
 
-项目使用 OpenAI-compatible Chat API。以 DeepSeek 为例：
+```bash
+uv run cyberagent <challenge_id>
+uv run cyberagent <challenge_id> --save --output-dir runs
+```
+
+## Provider Configuration
+
+Local JSON provider:
+
+```env
+CHALLENGE_PROVIDER=local_json
+CHALLENGE_LOCAL_JSON_DIR=./challenges
+```
+
+HTTP JSON provider:
+
+```env
+CHALLENGE_PROVIDER=http_json
+CHALLENGE_API_BASE_URL=https://ctf.example.com/api
+CHALLENGE_API_PATH_TEMPLATE=/challenges/{challenge_id}
+CHALLENGE_API_TOKEN=replace-me
+CHALLENGE_API_AUTH_SCHEME=Bearer
+CHALLENGE_API_TIMEOUT=20
+```
+
+Example local challenge:
+
+```json
+{
+  "title": "easy web",
+  "description": "Find the SQL injection.",
+  "category": "Web",
+  "attachments": ["attachment.zip"],
+  "remote_targets": ["http://example.test"]
+}
+```
+
+## LLM Configuration
+
+CyberAgent uses an OpenAI-compatible Chat API. DeepSeek example:
 
 ```env
 OPENAI_API_KEY=your-deepseek-api-key
@@ -35,22 +103,32 @@ OPENAI_TIMEOUT=60
 OPENAI_MAX_RETRIES=2
 ```
 
-如果使用其他兼容 OpenAI 格式的服务，通常只需要替换：
+For another OpenAI-compatible service, usually replace `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL`.
 
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
-- `OPENAI_MODEL`
+## Tests
 
-## 测试
-
-### 调用真实大模型分析题目信息并调度
 ```bash
-RUN_LLM_INTEGRATION_TESTS=1 uv run pytest tests/test_llm_classifier.py::test_llm_classify_challenge_with_real_model -s
-
-RUN_LLM_ANALYSIS_TESTS=1 uv run pytest tests/test_llm_challenge_analysis.py -s
+uv run pytest
 ```
 
-### 调用大模型测试子agent调度
+Real LLM tests are opt-in:
+
 ```bash
+RUN_LLM_INTEGRATION_TESTS=1 uv run pytest tests/test_llm_classifier.py -s
+RUN_LLM_ANALYSIS_TESTS=1 uv run pytest tests/test_llm_challenge_analysis.py -s
 PRINT_LLM_CLASSIFICATION_PROMPT=1 uv run pytest tests/test_llm_classifier.py::test_print_llm_classification_prompt -s
 ```
+
+## Extension Points
+
+- Add new providers in `src/cyberagent/providers/` and register them in `providers/registry.py`.
+- Add field recognition in `providers/normalizer.py`, not inside provider fetchers.
+- Add specialist tool integrations through `agents/tool_adapters.py` or a compatible `SpecialistToolAdapter` implementation.
+- Add new specialist nodes through `agents/specialists.py` and `agents/registry.py`.
+- Keep external actions behind tool adapters and L0 safety checks where applicable.
+
+## Development Notes
+
+- Use atomic Conventional Commits, preferably Chinese descriptions such as `feat: 接入专科工具Adapter`.
+- Do not commit `.env` or API keys.
+- Default tests must not require network access or real credentials.

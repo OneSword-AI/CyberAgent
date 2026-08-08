@@ -1,248 +1,167 @@
-## 文件组织
+# CyberAgent Architecture
 
-当前项目采用 `src/` 布局，核心代码位于 `src/cyberagent/`：
+## Overview
+
+CyberAgent is a LangGraph CTF-solving agent prototype. The current system is not a full autonomous solver yet; it provides the runtime skeleton for challenge ingestion, controller planning, parallel specialist dispatch, blackboard feedback, evidence gating, local flag verification, retries, and state persistence.
+
+## File Organization
 
 ```text
 CyberAgent/
 ├── README.md
-├── pyproject.toml
-├── uv.lock
-├── .env.example
+├── AGENTS.md
+├── ARCHITECTURE.md
 ├── docs/
 │   ├── cyberagent-langgraph-flow.excalidraw
 │   └── cyberagent-langgraph-flow.md
-├── src/
-│   └── cyberagent/
-│       ├── __init__.py
-│       ├── graph.py
-│       ├── models.py
-│       ├── agents/
-│       │   ├── __init__.py
-│       │   └── classifier.py
-│       └── providers/
-│           ├── __init__.py
-│           ├── base.py
-│           ├── fetch.py
-│           ├── http_json.py
-│           ├── local_json.py
-│           ├── normalizer.py
-│           └── registry.py
+├── src/cyberagent/
+│   ├── __init__.py              # CLI entry point
+│   ├── graph.py                 # LangGraph nodes, edges, reducers, initial state
+│   ├── runtime.py               # run_challenge(..., save=True, output_dir=...)
+│   ├── models.py                # ChallengeState and SpecialistResult
+│   ├── llm.py                   # OpenAI-compatible LLM factory
+│   ├── blackboard.py            # structured signal store and short leases
+│   ├── signals.py               # signal schema and visibility helpers
+│   ├── evidence.py              # finding/evidence helpers
+│   ├── evidence_gate.py         # evidence gate predicate
+│   ├── flag.py                  # default flag format validation
+│   ├── checkpoint.py            # state.json persistence
+│   ├── trace.py                 # trace event helper
+│   ├── agents/
+│   │   ├── controller.py        # LLM controller with rule fallback
+│   │   ├── router.py            # active specialist selection
+│   │   ├── specialists.py       # Web/Pwn/Reverse/Crypto/Misc/Forensics/Other agents
+│   │   ├── tool_adapters.py     # replaceable Web/Crypto/Misc adapter boundary
+│   │   ├── specialist_signals.py# publish SpecialistResult to blackboard signals
+│   │   ├── foundation.py        # observer/analyst/critic/memory signal agents
+│   │   ├── foundation_node.py   # foundation agent execution node
+│   │   ├── flag_extractor.py    # candidate flag extraction from findings/tools
+│   │   ├── flag_verifier.py     # local flag format validation
+│   │   ├── evidence_gate.py     # graph node wrapper for evidence gate
+│   │   └── retry.py             # failed attempt recording and retry scheduling
+│   ├── providers/
+│   │   ├── base.py              # provider contract and normalized challenge type
+│   │   ├── fetch.py             # graph fetch node
+│   │   ├── local_json.py        # local JSON provider
+│   │   ├── http_json.py         # HTTP JSON provider
+│   │   ├── normalizer.py        # raw field recognition and normalization
+│   │   └── registry.py          # provider selection
+│   └── tools/
+│       ├── adapter.py           # generic low-level ToolAdapter registry
+│       ├── defaults.py          # default HTTP/shell/file tools with L0 safety
+│       ├── http.py              # bounded HTTP/HTTPS helpers
+│       ├── shell.py             # shell execution wrapper
+│       ├── filesystem.py        # file inspection helper
+│       └── executor.py          # normalized tool output recording
 └── tests/
-    └── test_providers.py
 ```
 
-核心文件职责：
-
-- `src/cyberagent/__init__.py`：命令行入口，读取 `challenge_id`，启动 LangGraph。
-- `src/cyberagent/graph.py`：定义 LangGraph 流程，目前是 `fetch_challenge -> classify_challenge`。
-- `src/cyberagent/models.py`：定义全局共享状态 `ChallengeState`。
-- `src/cyberagent/agents/`：放 Agent 节点实现，例如分类 Agent、Web Agent、Pwn Agent 等。
-- `src/cyberagent/agents/classifier.py`：当前的题目方向分类节点，现阶段使用关键词规则。
-- `src/cyberagent/providers/`：放题目信息来源和标准化逻辑。
-- `src/cyberagent/providers/base.py`：定义 provider 接口和标准化后的题目数据结构。
-- `src/cyberagent/providers/fetch.py`：LangGraph 的题目信息获取节点，负责调用 provider 并写入 `ChallengeState`。
-- `src/cyberagent/providers/http_json.py`：从 HTTP JSON 接口读取原始题目信息。
-- `src/cyberagent/providers/local_json.py`：从本地 JSON 文件读取原始题目信息，适合开发和测试。
-- `src/cyberagent/providers/normalizer.py`：把不同格式的原始题目信息统一转换为内部格式。
-- `src/cyberagent/providers/registry.py`：根据配置选择具体 provider。
-- `docs/`：项目设计文档和 Excalidraw 流程图。
-- `tests/`：测试用例。
-
-## 当前运行链路
-
-当前最小链路如下：
+## Current Runtime Flow
 
 ```text
 challenge_id
   -> fetch_challenge
-  -> provider.fetch()
-  -> normalize_challenge()
-  -> classify_challenge
-  -> 输出 ChallengeState
+  -> download_attachments
+  -> foundation_agents
+  -> controller_agent
+  -> route_agent
+  -> Send(active specialist agents)
+  -> publish_specialist_results
+  -> controller_agent
+  -> repeat until max_controller_rounds is reached
+  -> extract_candidate_flags
+  -> evidence_gate
+  -> verify_flag or retry_agent
 ```
 
-运行示例：
+Important details:
+
+- `fetch_challenge` calls the selected provider and writes normalized metadata into `ChallengeState`.
+- `foundation_agents` creates initial `challenge_input`, `observation`, `memory_prior`, `hypothesis`, and `critic_report` signals.
+- `controller_agent` reads challenge metadata and signals, asks the LLM for a JSON plan, and falls back to rule classification if LLM configuration or parsing fails.
+- `route_agent` selects `active_agents` from controller output or category mapping.
+- LangGraph `Send` dispatches selected specialists in parallel.
+- Specialist nodes return `SpecialistResult`; the registry adapter merges results into state.
+- `publish_specialist_results` emits `specialist_result` signals back to the blackboard snapshot for the controller.
+- `controller_round` and `max_controller_rounds` bound feedback dispatch cycles.
+- `retry_agent` records failed attempts and resets the controller round for a new bounded pass.
+
+## State Contracts
+
+`ChallengeState` is the shared LangGraph state. Core fields include:
+
+- Challenge input: `challenge_id`, `title`, `description`, `attachments`, `downloaded_attachments`, `remote_targets`, `flag_format`, `category_hint`, `raw_challenge`.
+- Controller planning: `predicted_categories`, `next_agents`, `active_agents`, `plan`, `plan_rationale`, `controller_decisions`, `controller_round`, `max_controller_rounds`, `stop_condition`.
+- Results: `specialist_results`, `candidate_flags`, `verification_results`, `final_flag`, `failed_attempts`, `findings`, `tool_outputs`.
+- Coordination: `signals`, `published_specialist_results`, `trace`, `evidence_gate_passed`.
+
+`SpecialistResult` is the normalized return type for specialist Agents:
+
+```python
+{
+    "agent": "web_agent",
+    "status": "completed",  # completed | skipped | failed
+    "summary": "...",
+    "findings": [],
+    "candidate_flags": [],
+    "tool_outputs": [],
+    "next_actions": [],
+}
+```
+
+## Blackboard Signals
+
+Signals are structured messages with type, source, payload, provenance, status, parent IDs, and optional recipients. The current signal types include:
+
+- `challenge_input`
+- `observation`
+- `hypothesis`
+- `memory_prior`
+- `critic_report`
+- `feedback`
+- `evidence`
+- `specialist_result`
+
+The blackboard supports short leases to avoid duplicate processing. In the current graph, signals are persisted as `ChallengeState["signals"]`; `Blackboard(...)` can reconstruct a local board from that snapshot.
+
+## Specialist Tool Adapters
+
+Specialist Agents do not hardcode domain tooling. Web, Crypto, and Misc use `SpecialistToolAdapter` implementations from `agents/tool_adapters.py`.
+
+- `WebToolAdapter` currently performs a bounded `http_get` against the first remote target.
+- `PlaceholderToolAdapter` provides MVP boundaries for Crypto and Misc until real tools are added.
+- Custom adapters can be registered in `SpecialistToolAdapterRegistry` and injected in tests or future runtime wiring.
+
+This keeps Agent orchestration separate from scanner/exploit implementations.
+
+## Provider Extension
+
+Providers return raw dictionaries. Field recognition belongs in `providers/normalizer.py`.
+
+To add a provider:
+
+1. Create `src/cyberagent/providers/custom_platform.py`.
+2. Implement `fetch(challenge_id) -> dict[str, Any]`.
+3. Register the provider in `providers/registry.py`.
+4. Add tests using local fixtures and no real credentials.
+
+## Current Gaps
+
+The orchestration skeleton is functional, but the project is still an MVP:
+
+- Pwn, Reverse, Forensics, and Other are placeholders.
+- Crypto and Misc have adapter boundaries but no real solving tools.
+- Evidence gating is basic and does not yet bind each candidate flag to a full proof chain.
+- Report rendering exists but is not yet integrated into final runtime outputs.
+- Docker sandboxing and real scanner integrations are intentionally deferred.
+- Budget controls for time, token, request, and tool-call limits are not yet implemented.
+
+## Verification
+
+Run the default test suite:
 
 ```bash
-cp .env.example .env
-uv run cyberagent 123
+uv run pytest
 ```
 
-HTTP JSON provider 配置：
-
-```env
-CHALLENGE_PROVIDER=http_json
-CHALLENGE_API_BASE_URL=https://ctf.example.com/api
-CHALLENGE_API_PATH_TEMPLATE=/challenges/{challenge_id}
-CHALLENGE_API_TOKEN=replace-me
-CHALLENGE_API_AUTH_SCHEME=Bearer
-CHALLENGE_API_TIMEOUT=20
-```
-
-本地 JSON provider 配置：
-
-```env
-CHALLENGE_PROVIDER=local_json
-CHALLENGE_LOCAL_JSON_DIR=./challenges
-```
-
-本地题目文件示例：
-
-```json
-{
-  "title": "easy web",
-  "description": "Find the SQL injection.",
-  "category": "Web",
-  "attachments": ["attachment.zip"],
-  "remote_targets": ["http://example.test"]
-}
-```
-
-## 后续扩展方式
-
-### 新增题目信息来源
-
-如果要接入新的平台或数据来源，新建一个 provider：
-
-```text
-src/cyberagent/providers/custom_platform.py
-```
-
-provider 只负责返回原始 `dict`，不要在 provider 内写复杂识别逻辑：
-
-```python
-from typing import Any
-
-
-class CustomPlatformProvider:
-    name = "custom_platform"
-
-    def fetch(self, challenge_id: str) -> dict[str, Any]:
-        # 请求接口、读取数据库或读取文件
-        return raw_payload
-```
-
-然后在 `src/cyberagent/providers/registry.py` 注册：
-
-```python
-providers = {
-    HttpJsonProvider.name: HttpJsonProvider(),
-    LocalJsonProvider.name: LocalJsonProvider(),
-    CustomPlatformProvider.name: CustomPlatformProvider(),
-}
-```
-
-### 扩展题目信息识别
-
-不同平台返回的字段名可能不同，统一在 `src/cyberagent/providers/normalizer.py` 里处理。
-
-例如新增字段兼容：
-
-- 标题：`title`、`name`、`subject`
-- 描述：`description`、`body`、`content`、`prompt`
-- 附件：`attachments`、`files`、`downloads`
-- 远程目标：`remote_targets`、`targets`、`services`、`connection_info`
-
-后续可以继续扩展：
-
-- HTML/Markdown 清洗。
-- 从描述里提取 URL、`nc host port`、附件链接。
-- 把远程目标解析成结构化对象。
-- 识别 flag 格式、题目标签、分值、比赛 ID。
-
-### 新增 Agent 节点
-
-新增专科 Agent 时，在 `src/cyberagent/agents/` 下创建文件：
-
-```text
-src/cyberagent/agents/web.py
-src/cyberagent/agents/crypto.py
-src/cyberagent/agents/pwn.py
-```
-
-每个 Agent 节点应遵循同一个模式：
-
-```python
-from cyberagent.models import ChallengeState
-
-
-def web_agent(state: ChallengeState) -> ChallengeState:
-    findings = [
-        *state.get("findings", []),
-        {
-            "agent": "web_agent",
-            "summary": "发现登录接口可能存在 SQL 注入",
-        },
-    ]
-
-    return {
-        **state,
-        "findings": findings,
-    }
-```
-
-然后在 `src/cyberagent/graph.py` 中注册节点和边。
-
-### 扩展 LangGraph 路由
-
-当前图是线性的：
-
-```text
-fetch_challenge -> classify_challenge
-```
-
-后续应扩展为条件路由：
-
-```text
-fetch_challenge
-  -> classify_challenge
-  -> route_agent
-  -> web_agent / pwn_agent / reverse_agent / crypto_agent / misc_agent / forensics_agent
-  -> merge_findings
-  -> verify_flag
-  -> finalize_report
-```
-
-复杂题目可以让 `route_agent` 根据 `predicted_categories` 调度多个子 Agent，并在 `merge_findings` 中合并结果。
-
-### 接入大模型
-
-当前 `classifier.py` 使用关键词规则，不是大模型分析。后续可以新增 LLM 分类节点：
-
-```text
-src/cyberagent/agents/llm_classifier.py
-```
-
-建议大模型输出结构化 JSON：
-
-```json
-{
-  "predicted_categories": ["Web"],
-  "complexity": "simple",
-  "reasoning_summary": "题目包含 HTTP 服务和登录绕过线索",
-  "next_agents": ["web_agent"]
-}
-```
-
-工程上建议保留关键词分类作为 fallback：大模型不可用或输出非法时，退回规则分类。
-
-### 扩展工具执行层
-
-后续工具调用建议单独放到：
-
-```text
-src/cyberagent/tools/
-```
-
-建议先实现统一工具接口，再给各 Agent 使用：
-
-```text
-tools/
-├── executor.py
-├── docker.py
-├── http.py
-├── filesystem.py
-└── shell.py
-```
-
-工具调用结果统一写入 `ChallengeState["tool_outputs"]`，包括命令、输入、输出摘要、退出码和产物路径。
+Real LLM tests require explicit environment flags and configured credentials.
