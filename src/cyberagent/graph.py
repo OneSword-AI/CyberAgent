@@ -8,6 +8,7 @@ from cyberagent.agents.blackboard_specialists import run_blackboard_specialists
 from cyberagent.agents.controller import run_controller_agent
 from cyberagent.agents.evidence_gate import run_evidence_gate
 from cyberagent.agents.flag_extractor import extract_candidate_flags
+from cyberagent.agents.flag_submitter import submit_flag
 from cyberagent.agents.flag_verifier import verify_flag
 from cyberagent.agents.foundation_node import run_foundation_agents
 from cyberagent.agents.retry import retry_agent
@@ -26,6 +27,7 @@ def build_graph():
     graph.add_node("extract_candidate_flags", _as_delta_node(extract_candidate_flags))
     graph.add_node("evidence_gate", _as_delta_node(run_evidence_gate))
     graph.add_node("verify_flag", _as_delta_node(verify_flag))
+    graph.add_node("submit_flag", _as_delta_node(submit_flag))
     graph.add_node("retry_agent", _as_delta_node(retry_agent))
 
     graph.set_entry_point("fetch_challenge")
@@ -54,6 +56,15 @@ def build_graph():
     graph.add_conditional_edges(
         "verify_flag",
         _verification_route,
+        {
+            "submit": "submit_flag",
+            "retry": "retry_agent",
+            "end": END,
+        },
+    )
+    graph.add_conditional_edges(
+        "submit_flag",
+        _submission_route,
         {
             "retry": "retry_agent",
             "end": END,
@@ -85,6 +96,7 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "published_specialist_results": 0,
         "findings": [],
         "verification_results": [],
+        "submit_results": [],
         "failed_attempts": [],
         "tool_outputs": [],
         "trace": [],
@@ -98,10 +110,25 @@ def initial_state(challenge_id: str) -> ChallengeState:
 
 def _verification_route(state: ChallengeState) -> str:
     if state.get("final_flag"):
-        return "end"
+        return "submit"
     if state.get("retry_count", 0) < state.get("max_retries", 1):
         return "retry"
     return "end"
+
+
+def _submission_route(state: ChallengeState) -> str:
+    if state.get("remote_accepted_flag"):
+        return "end"
+    if _latest_submission_rejected(state) and state.get("retry_count", 0) < state.get("max_retries", 1):
+        return "retry"
+    return "end"
+
+
+def _latest_submission_rejected(state: ChallengeState) -> bool:
+    if not state.get("submit_results"):
+        return False
+    latest = state["submit_results"][-1]
+    return latest.get("submitted") is True and latest.get("accepted") is False
 
 
 def _controller_route(state: ChallengeState) -> str:
@@ -124,6 +151,7 @@ APPEND_FIELDS = {
     "downloaded_attachments",
     "findings",
     "verification_results",
+    "submit_results",
     "failed_attempts",
     "tool_outputs",
     "trace",

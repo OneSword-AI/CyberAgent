@@ -50,6 +50,7 @@ class ChallengeState(TypedDict):
     published_specialist_results: Annotated[int, _last]
     findings: Annotated[list[dict], _append_list]
     verification_results: Annotated[list[dict], _append_list]
+    submit_results: Annotated[list[dict], _append_list]
     failed_attempts: Annotated[list[dict], _append_list]
     tool_outputs: Annotated[list[dict], _append_list]
     trace: Annotated[list[dict], _append_list]
@@ -67,4 +68,5 @@ class ChallengeState(TypedDict):
     complexity: NotRequired[str]
     reasoning_summary: NotRequired[str]
     final_flag: NotRequired[str]
+    remote_accepted_flag: NotRequired[str]
     report: NotRequired[str]

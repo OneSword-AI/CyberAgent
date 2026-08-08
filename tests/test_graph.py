@@ -46,6 +46,9 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert result["tool_outputs"][-1]["ok"] is True
     assert result["candidate_flags"] == ["flag{from_web}"]
     assert result["final_flag"] == "flag{from_web}"
+    assert "remote_accepted_flag" not in result
+    assert result["submit_results"][-1]["provider"] == "disabled"
+    assert result["submit_results"][-1]["submitted"] is False
     assert result["verification_results"][-1]["valid"] is True
     signal_types = [signal["type"] for signal in result["signals"]]
     assert signal_types[:5] == [
@@ -68,6 +71,7 @@ def test_graph_fetches_classifies_and_routes_with_fallback(tmp_path, monkeypatch
     assert "tool.output" in trace_events
     assert "flag.extract" in trace_events
     assert "flag.verify" in trace_events
+    assert "flag.submit" in trace_events
 
 
 def test_graph_retries_once_when_no_flag_is_found(tmp_path, monkeypatch):
