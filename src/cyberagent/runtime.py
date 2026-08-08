@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 
-from cyberagent.checkpoint import save_state
+from cyberagent.checkpoint import save_run_outputs
 from cyberagent.graph import build_graph, initial_state
 from cyberagent.models import ChallengeState
 
@@ -19,5 +19,5 @@ def run_challenge(
     app = build_graph()
     result = app.invoke(initial_state(challenge_id))
     if save:
-        save_state(result, output_dir)
+        save_run_outputs(result, output_dir)
     return result

@@ -3,7 +3,19 @@ from cyberagent import runtime
 
 class FakeGraph:
     def invoke(self, state):
-        return {**state, "title": "from runtime"}
+        return {
+            **state,
+            "title": "from runtime",
+            "final_flag": "flag{runtime}",
+            "trace": [
+                {
+                    "ts": 1.0,
+                    "node": "fake_graph",
+                    "event": "fake.invoke",
+                    "details": {"ok": True},
+                }
+            ],
+        }
 
 
 def test_run_challenge_builds_initial_state_and_invokes_graph(monkeypatch):
@@ -37,3 +49,8 @@ def test_run_challenge_can_save_final_state(tmp_path, monkeypatch):
     assert result["title"] == "from runtime"
     assert path.exists()
     assert "from runtime" in path.read_text(encoding="utf-8")
+    assert (tmp_path / "runtime01" / "report.md").exists()
+    assert (tmp_path / "runtime01" / "flag.txt").read_text(encoding="utf-8") == "flag{runtime}\n"
+    assert "fake_graph\tfake.invoke" in (tmp_path / "runtime01" / "run.log").read_text(
+        encoding="utf-8"
+    )
