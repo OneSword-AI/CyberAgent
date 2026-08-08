@@ -1,0 +1,22 @@
+agents:
+  - id: observer_1
+    type: observer
+    name: "基础观察器"
+    config:
+      max_tags: 10
+
+  - id: memory_1
+    type: memory
+    name: "历史记忆"
+    config:
+      memory_path: "data/memory.json"
+
+  - id: analyzer_1
+    type: analyzer
+    name: "假设分析器"
+    config: {}
+
+  - id: questioner_1
+    type: questioner
+    name: "独立质疑器"
+    config: {}

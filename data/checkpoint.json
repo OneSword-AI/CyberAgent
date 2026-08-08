@@ -1,0 +1,15 @@
+{
+  "round_num": 12,
+  "signal_count": 16,
+  "timestamp": "2026-07-29T09:07:00Z",
+  "summary": {
+    "RAW_INPUT": 3,
+    "OBSERVATION": 3,
+    "HYPOTHESIS": 3,
+    "QUESTION": 2,
+    "MEMORY_PRIOR": 2,
+    "EVIDENCE": 1,
+    "CANDIDATE_CONCLUSION": 1,
+    "CONCLUSION": 1
+  }
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "label": "port_scan",
+    "subject": "192.168.1.1",
+    "tags": [
+      "port_activity",
+      "scan"
+    ],
+    "description": "Previously observed port scanning from this host"
+  },
+  {
+    "label": "brute_force_attempt",
+    "subject": "10.0.0.5",
+    "tags": [
+      "auth_activity",
+      "failure"
+    ],
+    "description": "Repeated SSH login failures in prior incident"
+  }
+]

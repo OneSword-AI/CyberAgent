@@ -1,0 +1,331 @@
+{
+  "signals": [
+    {
+      "type": "RAW_INPUT",
+      "source": "user",
+      "payload": {
+        "text": "\u5f00\u59cb\u5bf9fudan.edu.cn\u7684\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u4f18\u5148\u6d4b\u8bd5UEditor\u548cBT\u9762\u677f\u76f8\u5173\u8d44\u4ea7\uff0c\u53d1\u73b0\u6f0f\u6d1e\u5199\u62a5\u544a\u5230/home/hack/SRC/edu/wp"
+      },
+      "id": "4b71b226-d847-425c-b225-363e1cf6e63a",
+      "timestamp": "2026-07-29T08:59:56.340874+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 0,
+      "parent_id": null,
+      "processed_by": [
+        "observer_1"
+      ]
+    },
+    {
+      "type": "OBSERVATION",
+      "source": "observer_1",
+      "payload": {
+        "subject": "\u5f00\u59cb\u5bf9fudan.edu.cn\u7684\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u4f18\u5148\u6d4b\u8bd5ueditor\u548cbt\u9762\u677f\u76f8\u5173\u8d44\u4ea7\uff0c\u53d1\u73b0\u6f0f\u6d1e\u5199\u62a5\u544a\u5230/home/hack/src/edu/wp",
+        "raw_text": "\u5f00\u59cb\u5bf9fudan.edu.cn\u7684\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u4f18\u5148\u6d4b\u8bd5UEditor\u548cBT\u9762\u677f\u76f8\u5173\u8d44\u4ea7\uff0c\u53d1\u73b0\u6f0f\u6d1e\u5199\u62a5\u544a\u5230/home/hack/SRC/edu/wp",
+        "tags": [
+          "generic"
+        ],
+        "confidence": 0.7
+      },
+      "id": "12c42bcb-28e8-4cd3-bc42-20ab183997e2",
+      "timestamp": "2026-07-29T08:59:56.341285+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 1,
+      "parent_id": "4b71b226-d847-425c-b225-363e1cf6e63a",
+      "processed_by": [
+        "memory_1",
+        "analyzer_1"
+      ]
+    },
+    {
+      "type": "HYPOTHESIS",
+      "source": "analyzer_1",
+      "payload": {
+        "subject": "\u5f00\u59cb\u5bf9fudan.edu.cn\u7684\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u4f18\u5148\u6d4b\u8bd5ueditor\u548cbt\u9762\u677f\u76f8\u5173\u8d44\u4ea7\uff0c\u53d1\u73b0\u6f0f\u6d1e\u5199\u62a5\u544a\u5230/home/hack/src/edu/wp",
+        "hypothesis": "unknown_activity",
+        "confidence": 0.3,
+        "basis_tags": [
+          "generic"
+        ]
+      },
+      "id": "128beda5-5c46-48bc-9a76-3daad43af2d0",
+      "timestamp": "2026-07-29T08:59:56.341661+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 1,
+      "parent_id": "12c42bcb-28e8-4cd3-bc42-20ab183997e2",
+      "processed_by": [
+        "questioner_1",
+        "memory_1"
+      ]
+    },
+    {
+      "type": "QUESTION",
+      "source": "questioner_1",
+      "payload": {
+        "subject": "\u5f00\u59cb\u5bf9fudan.edu.cn\u7684\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u4f18\u5148\u6d4b\u8bd5ueditor\u548cbt\u9762\u677f\u76f8\u5173\u8d44\u4ea7\uff0c\u53d1\u73b0\u6f0f\u6d1e\u5199\u62a5\u544a\u5230/home/hack/src/edu/wp",
+        "about_hypothesis": "unknown_activity",
+        "question": "Confidence 0.30 too low \u2014 what evidence supports 'unknown_activity'?",
+        "requires_evidence": true
+      },
+      "id": "5898e63d-9e8e-42cb-bc8d-99d3b577ae06",
+      "timestamp": "2026-07-29T08:59:56.341864+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 1,
+      "parent_id": "128beda5-5c46-48bc-9a76-3daad43af2d0",
+      "processed_by": []
+    },
+    {
+      "type": "RAW_INPUT",
+      "source": "user",
+      "payload": {
+        "text": "\u6e17\u900f\u6d4b\u8bd5\u76ee\u6807\uff1ahttps://security.fudan.edu.cn:40000/#/login?redirect=/billboard \u8d44\u4ea7\u641c\u96c6\u5de5\u5177\uff1a/home/hack/SRC/tools/OneForAll/\u3001/home/hack/ctf/tools/JSFinder \u6388\u6743\u4e66\uff1a/home/hack/files/autosolve/\u6e17\u900f\u6d4b\u8bd5\u6388\u6743\u4e66.docx \u8981\u6c42\uff1a\u81ea\u4e3b\u5f00\u542f\u591aagent\u6e17\u900f\u6d4b\u8bd5\uff0c\u9009\u62e9\u6027\u8d44\u4ea7\u6d4b\u8bd5\uff0c\u6f0f\u6d1e\u8bb0\u5f55\u5230/home/hack/SRC/edu/wp"
+      },
+      "id": "b7655b65-203f-439d-b4d9-383ec9375186",
+      "timestamp": "2026-07-29T09:06:36.757679+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 0,
+      "parent_id": null,
+      "processed_by": [
+        "observer_1"
+      ]
+    },
+    {
+      "type": "OBSERVATION",
+      "source": "observer_1",
+      "payload": {
+        "subject": "security.fudan",
+        "raw_text": "\u6e17\u900f\u6d4b\u8bd5\u76ee\u6807\uff1ahttps://security.fudan.edu.cn:40000/#/login?redirect=/billboard \u8d44\u4ea7\u641c\u96c6\u5de5\u5177\uff1a/home/hack/SRC/tools/OneForAll/\u3001/home/hack/ctf/tools/JSFinder \u6388\u6743\u4e66\uff1a/home/hack/files/autosolve/\u6e17\u900f\u6d4b\u8bd5\u6388\u6743\u4e66.docx \u8981\u6c42\uff1a\u81ea\u4e3b\u5f00\u542f\u591aagent\u6e17\u900f\u6d4b\u8bd5\uff0c\u9009\u62e9\u6027\u8d44\u4ea7\u6d4b\u8bd5\uff0c\u6f0f\u6d1e\u8bb0\u5f55\u5230/home/hack/SRC/edu/wp",
+        "tags": [
+          "auth_activity"
+        ],
+        "confidence": 0.7
+      },
+      "id": "b2ecc800-d7d4-4a2a-b760-62a52443a021",
+      "timestamp": "2026-07-29T09:06:36.758216+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 5,
+      "parent_id": "b7655b65-203f-439d-b4d9-383ec9375186",
+      "processed_by": [
+        "memory_1",
+        "analyzer_1"
+      ]
+    },
+    {
+      "type": "MEMORY_PRIOR",
+      "source": "memory_1",
+      "payload": {
+        "subject": "security.fudan",
+        "prior_label": "brute_force_attempt",
+        "description": "Repeated SSH login failures in prior incident",
+        "source": "memory",
+        "advisory_only": true,
+        "note": "Prior knowledge only. Cannot substitute for evidence."
+      },
+      "id": "186a4780-210c-481c-b5b5-2ee058f166fc",
+      "timestamp": "2026-07-29T09:06:36.758591+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 5,
+      "parent_id": "b2ecc800-d7d4-4a2a-b760-62a52443a021",
+      "processed_by": []
+    },
+    {
+      "type": "HYPOTHESIS",
+      "source": "analyzer_1",
+      "payload": {
+        "subject": "security.fudan",
+        "hypothesis": "brute_force_attempt",
+        "confidence": 0.7,
+        "basis_tags": [
+          "auth_activity"
+        ]
+      },
+      "id": "46a8158e-c3c3-47bb-8e56-2bd230944023",
+      "timestamp": "2026-07-29T09:06:36.758926+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 5,
+      "parent_id": "b2ecc800-d7d4-4a2a-b760-62a52443a021",
+      "processed_by": [
+        "questioner_1",
+        "memory_1"
+      ]
+    },
+    {
+      "type": "EVIDENCE",
+      "source": "questioner_1",
+      "payload": {
+        "subject": "security.fudan",
+        "supports_hypothesis": "brute_force_attempt",
+        "description": "stub: behavioral indicator for brute_force_attempt",
+        "confidence": 0.65,
+        "source": "stub_sensor",
+        "advisory_only": false
+      },
+      "id": "4e1c66b5-cdde-4107-bbe7-2377c94433b6",
+      "timestamp": "2026-07-29T09:06:36.759249+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 5,
+      "parent_id": "46a8158e-c3c3-47bb-8e56-2bd230944023",
+      "processed_by": [
+        "analyzer_1"
+      ]
+    },
+    {
+      "type": "MEMORY_PRIOR",
+      "source": "memory_1",
+      "payload": {
+        "subject": "security.fudan",
+        "prior_label": "brute_force_attempt",
+        "past_count": 1,
+        "description": "Seen 1 time(s) historically",
+        "advisory_only": true,
+        "note": "Historical frequency is not evidence of current occurrence."
+      },
+      "id": "3a7d5972-b904-40ab-913c-a7495e5e866e",
+      "timestamp": "2026-07-29T09:06:36.759692+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 6,
+      "parent_id": "46a8158e-c3c3-47bb-8e56-2bd230944023",
+      "processed_by": []
+    },
+    {
+      "type": "CANDIDATE_CONCLUSION",
+      "source": "analyzer_1",
+      "payload": {
+        "subject": "security.fudan",
+        "conclusion": "brute_force_attempt",
+        "confidence": 0.75,
+        "source": "evidence_escalation"
+      },
+      "id": "0489ef18-cc9d-40bc-bae8-384a2d53be4c",
+      "timestamp": "2026-07-29T09:06:36.760041+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 6,
+      "parent_id": "4e1c66b5-cdde-4107-bbe7-2377c94433b6",
+      "processed_by": [
+        "questioner_1"
+      ]
+    },
+    {
+      "type": "CONCLUSION",
+      "source": "questioner_1",
+      "payload": {
+        "subject": "security.fudan",
+        "conclusion": "brute_force_attempt",
+        "confidence": 0.75,
+        "evidence_count": 1,
+        "memory_priors": 2,
+        "validated_by": "questioner_1"
+      },
+      "id": "0ffaed70-6671-47e7-89f1-515a1bf1aaf4",
+      "timestamp": "2026-07-29T09:06:36.760414+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 6,
+      "parent_id": "0489ef18-cc9d-40bc-bae8-384a2d53be4c",
+      "processed_by": []
+    },
+    {
+      "type": "RAW_INPUT",
+      "source": "user",
+      "payload": {
+        "text": "\u542f\u52a8\u8702\u7fa4\u5bf9\u6307\u5b9a\u8d44\u4ea7\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u8d44\u4ea7\uff1a/home/hack/SRC/EDU/fudan/ \u4f18\u5148\u6d4b\u8bd5UEditor\u548cBT\u9762\u677f\u76f8\u5173\u8d44\u4ea7\uff0c\u53d1\u73b0\u8fbe\u5230\u8981\u6c42\u7684\u6f0f\u6d1e\u8981\u628a\u62a5\u544a\u5199\u5230/home/hack/SRC/edu/wp\u6587\u4ef6\u5939\u3002\u4f7f\u7528\u672c\u5730\u5de5\u5177\u5982nuclei\u3001JSFinder\u3001OneForAll\u7b49\u3002"
+      },
+      "id": "64598ac2-044c-4aeb-b647-5dca881ddd14",
+      "timestamp": "2026-07-29T09:07:00.992159+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 0,
+      "parent_id": null,
+      "processed_by": [
+        "observer_1"
+      ]
+    },
+    {
+      "type": "OBSERVATION",
+      "source": "observer_1",
+      "payload": {
+        "subject": "\u542f\u52a8\u8702\u7fa4\u5bf9\u6307\u5b9a\u8d44\u4ea7\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u8d44\u4ea7\uff1a/home/hack/src/edu/fudan/",
+        "raw_text": "\u542f\u52a8\u8702\u7fa4\u5bf9\u6307\u5b9a\u8d44\u4ea7\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u8d44\u4ea7\uff1a/home/hack/SRC/EDU/fudan/ \u4f18\u5148\u6d4b\u8bd5UEditor\u548cBT\u9762\u677f\u76f8\u5173\u8d44\u4ea7\uff0c\u53d1\u73b0\u8fbe\u5230\u8981\u6c42\u7684\u6f0f\u6d1e\u8981\u628a\u62a5\u544a\u5199\u5230/home/hack/SRC/edu/wp\u6587\u4ef6\u5939\u3002\u4f7f\u7528\u672c\u5730\u5de5\u5177\u5982nuclei\u3001JSFinder\u3001OneForAll\u7b49\u3002",
+        "tags": [
+          "generic"
+        ],
+        "confidence": 0.7
+      },
+      "id": "8e4db0a0-606d-42ce-8311-3b3379015885",
+      "timestamp": "2026-07-29T09:07:00.992713+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 9,
+      "parent_id": "64598ac2-044c-4aeb-b647-5dca881ddd14",
+      "processed_by": [
+        "memory_1",
+        "analyzer_1"
+      ]
+    },
+    {
+      "type": "HYPOTHESIS",
+      "source": "analyzer_1",
+      "payload": {
+        "subject": "\u542f\u52a8\u8702\u7fa4\u5bf9\u6307\u5b9a\u8d44\u4ea7\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u8d44\u4ea7\uff1a/home/hack/src/edu/fudan/",
+        "hypothesis": "unknown_activity",
+        "confidence": 0.3,
+        "basis_tags": [
+          "generic"
+        ]
+      },
+      "id": "c0d7448b-efad-4c7e-a836-bc240382b854",
+      "timestamp": "2026-07-29T09:07:00.993435+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 9,
+      "parent_id": "8e4db0a0-606d-42ce-8311-3b3379015885",
+      "processed_by": [
+        "questioner_1",
+        "memory_1"
+      ]
+    },
+    {
+      "type": "QUESTION",
+      "source": "questioner_1",
+      "payload": {
+        "subject": "\u542f\u52a8\u8702\u7fa4\u5bf9\u6307\u5b9a\u8d44\u4ea7\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u81ea\u4e3b\u5f00\u542f\u591aagent\u8fdb\u884c\u6e17\u900f\u6d4b\u8bd5\uff0c\u5141\u8bb8\u7f51\u7edc\u8bf7\u6c42\u3002\u8d44\u4ea7\uff1a/home/hack/src/edu/fudan/",
+        "about_hypothesis": "unknown_activity",
+        "question": "Confidence 0.30 too low \u2014 what evidence supports 'unknown_activity'?",
+        "requires_evidence": true
+      },
+      "id": "71827efe-4352-4952-a1d7-eeb2fd5b9cf2",
+      "timestamp": "2026-07-29T09:07:00.993860+00:00",
+      "status": "PENDING",
+      "lease_holder": null,
+      "lease_expiry": null,
+      "round_num": 9,
+      "parent_id": "c0d7448b-efad-4c7e-a836-bc240382b854",
+      "processed_by": []
+    }
+  ]
+}
