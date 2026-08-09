@@ -41,4 +41,13 @@ class L0SafetyGate:
 
 def _mentions_secret(params: dict) -> bool:
     text = str(params).upper()
-    return any(name in text for name in ("OPENAI_API_KEY", "CTF_API_TOKEN", "PASSWORD", "SECRET"))
+    return any(
+        name in text
+        for name in (
+            "OPENAI_API_KEY",
+            "CTF_API_TOKEN",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "PRIVATE_KEY",
+        )
+    )

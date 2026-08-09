@@ -125,3 +125,22 @@ def test_http_post_sends_encoded_body_and_headers(monkeypatch):
     assert result["output"] == "posted"
     assert result["metadata"]["method"] == "POST"
     assert result["metadata"]["scheme"] == "https"
+
+
+def test_http_request_sends_cookies_and_records_set_cookies(monkeypatch):
+    class CookieResponse(FakeResponse):
+        headers = {
+            "Content-Type": "text/plain",
+            "Set-Cookie": "session=abc123; Path=/",
+        }
+
+    def fake_urlopen(request, timeout):
+        assert request.headers["Cookie"] == "session=old"
+        return CookieResponse(b"logged in")
+
+    monkeypatch.setattr("cyberagent.tools.http.urlopen", fake_urlopen)
+
+    result = http_get("https://example.test", cookies={"session": "old"})
+
+    assert result["ok"] is True
+    assert result["metadata"]["set_cookies"] == {"session": "abc123"}

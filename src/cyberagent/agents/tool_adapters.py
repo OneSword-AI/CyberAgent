@@ -3,7 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 from shlex import quote
 from typing import Any, Protocol, TypedDict, runtime_checkable
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from cyberagent.budget import (
     budget_allows_tool,
@@ -37,6 +37,9 @@ class SpecialistToolAdapter(Protocol):
 class WebToolAdapter:
     name = "web"
     probe_paths = ("/robots.txt", "/.git/HEAD", "/admin", "/login")
+    active_payloads = ("'", "{{7*7}}", "../../../../etc/passwd")
+    max_form_submissions = 2
+    max_parameter_probes = 6
 
     def __init__(
         self,
@@ -49,7 +52,15 @@ class WebToolAdapter:
         return {
             "name": self.name,
             "description": "Perform bounded HTTP probing, path attempts, response flag extraction, and simple form/parameter discovery.",
-            "capabilities": ["http_get", "path_probe", "flag_extract", "form_detect", "parameter_detect"],
+            "capabilities": [
+                "http_get",
+                "http_post",
+                "path_probe",
+                "flag_extract",
+                "form_detect",
+                "parameter_detect",
+                "active_interaction",
+            ],
         }
 
     def execute(self, state: ChallengeState) -> SpecialistAdapterResult:
@@ -101,12 +112,43 @@ class WebToolAdapter:
                 )
             )
 
+        cookies = _collect_cookies(tool_outputs)
+        active_outputs, active_findings = self._active_interaction(
+            state,
+            budget_state,
+            forms,
+            parameters,
+            tool_outputs,
+            cookies,
+        )
+        tool_outputs.extend(active_outputs)
+        findings.extend(active_findings)
+        for output in active_outputs:
+            candidate_flags = merge_candidate_flags(
+                candidate_flags,
+                extract_flags(
+                    str(output.get("output", "")),
+                    state.get("flag_format"),
+                ),
+            )
+
+        next_actions = []
+        if not candidate_flags:
+            next_actions.append(
+                {
+                    "kind": "web_active_probe",
+                    "reason": "no flag found; inspect active response differences before repeating probes",
+                }
+            )
         return {
-            "summary": f"Web Adapter probed {len(urls)} URL(s).",
+            "summary": (
+                f"Web Adapter probed {len(urls)} URL(s) and performed "
+                f"{len(active_outputs)} active interaction(s)."
+            ),
             "findings": findings,
             "candidate_flags": candidate_flags,
             "tool_outputs": tool_outputs,
-            "next_actions": [],
+            "next_actions": next_actions,
         }
 
     def _http_get(self, url: str, state: ChallengeState) -> dict[str, Any]:
@@ -119,6 +161,111 @@ class WebToolAdapter:
             self._tool_executor("http_get", {"url": url}, caller="web_agent"),
             caller="web_agent",
         )
+
+    def _http_post(
+        self,
+        url: str,
+        data: dict[str, str],
+        state: ChallengeState,
+        cookies: dict[str, str],
+    ) -> dict[str, Any]:
+        if not budget_allows_tool(state, "http_post"):
+            return _tool_output(
+                budget_denied_tool_result(
+                    "http_post",
+                    budget_exhaustion_reason(state, "http_post"),
+                ),
+                caller="web_agent",
+            )
+        return _tool_output(
+            self._tool_executor(
+                "http_post",
+                {
+                    "url": url,
+                    "data": urlencode(data),
+                    "headers": {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    "cookies": cookies,
+                },
+                caller="web_agent",
+            ),
+            caller="web_agent",
+        )
+
+    def _active_interaction(
+        self,
+        state: ChallengeState,
+        budget_state: ChallengeState,
+        forms: list[dict[str, Any]],
+        parameters: list[dict[str, Any]],
+        baseline_outputs: list[dict[str, Any]],
+        cookies: dict[str, str],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        outputs: list[dict[str, Any]] = []
+        findings: list[dict[str, Any]] = []
+        submissions = 0
+        probes = 0
+
+        for form in forms:
+            if submissions >= self.max_form_submissions:
+                break
+            method = str(form.get("method", "get")).lower()
+            if method != "post":
+                continue
+            action = urljoin(str(form.get("page", "")), str(form.get("action", "")))
+            data = _form_values(form.get("inputs", []))
+            if not action or not data:
+                continue
+            output = self._http_post(action, data, budget_state, cookies)
+            outputs.append(output)
+            budget_state = _count_local_budget_use(budget_state, output)
+            submissions += 1
+            findings.append(
+                _active_finding(
+                    "Submitted a bounded form payload.",
+                    target=action,
+                    payload=data,
+                    baseline=_baseline_for_url(baseline_outputs, str(form.get("page", ""))),
+                    response=output,
+                )
+            )
+
+        for parameter in parameters:
+            if probes >= self.max_parameter_probes:
+                break
+            page = str(parameter.get("page", ""))
+            href = urljoin(page, str(parameter.get("href", "")))
+            for name in parameter.get("names", []):
+                for payload in self.active_payloads:
+                    if probes >= self.max_parameter_probes:
+                        break
+                    target = _with_query_value(href, str(name), payload)
+                    output = self._http_get(target, budget_state)
+                    outputs.append(output)
+                    budget_state = _count_local_budget_use(budget_state, output)
+                    probes += 1
+                    baseline = _baseline_for_url(baseline_outputs, page)
+                    evidence = _response_comparison(baseline, output)
+                    evidence.update({"parameter": name, "payload": payload, "target": target})
+                    output.setdefault("metadata", {}).update(
+                        {
+                            "interaction": "active",
+                            "target": target,
+                            "payload": {str(name): payload},
+                            "judgment": evidence,
+                        }
+                    )
+                    findings.append(
+                        _adapter_finding(
+                            "Active parameter probe completed.",
+                            evidence,
+                        )
+                    )
+                if probes >= self.max_parameter_probes:
+                    break
+
+        return outputs, findings
 
 
 class PlaceholderToolAdapter:
@@ -393,6 +540,128 @@ def _detect_parameters(body: str, page_url: str) -> list[dict[str, Any]]:
                 }
             )
     return parameters
+
+
+def _form_values(inputs: list[str]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for name in inputs:
+        lowered = name.lower()
+        if "pass" in lowered:
+            value = "admin"
+        elif any(token in lowered for token in ("user", "email", "login", "name")):
+            value = "admin"
+        elif any(token in lowered for token in ("search", "query", "keyword", "q")):
+            value = "test"
+        else:
+            value = "test"
+        values[name] = value
+    return values
+
+
+def _with_query_value(url: str, name: str, value: str) -> str:
+    parsed = urlsplit(url)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    replaced = False
+    updated: list[tuple[str, str]] = []
+    for key, current in query:
+        if key == name:
+            updated.append((key, value))
+            replaced = True
+        else:
+            updated.append((key, current))
+    if not replaced:
+        updated.append((name, value))
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, urlencode(updated), parsed.fragment)
+    )
+
+
+def _collect_cookies(outputs: list[dict[str, Any]]) -> dict[str, str]:
+    cookies: dict[str, str] = {}
+    for output in outputs:
+        set_cookies = output.get("metadata", {}).get("set_cookies", {})
+        if isinstance(set_cookies, dict):
+            cookies.update(
+                {str(name): str(value) for name, value in set_cookies.items()}
+            )
+    return cookies
+
+
+def _baseline_for_url(
+    outputs: list[dict[str, Any]],
+    url: str,
+) -> dict[str, Any]:
+    for output in outputs:
+        metadata = output.get("metadata", {})
+        if metadata.get("url") == url:
+            return output
+    return {}
+
+
+def _response_comparison(
+    baseline: dict[str, Any],
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    baseline_metadata = baseline.get("metadata", {})
+    response_metadata = response.get("metadata", {})
+    baseline_body = str(baseline.get("output", ""))
+    response_body = str(response.get("output", ""))
+    indicators: list[str] = []
+    lowered = response_body.lower()
+    if any(
+        marker in lowered
+        for marker in (
+            "sql syntax",
+            "mysql",
+            "sqlite",
+            "postgres",
+            "odbc",
+            "syntax error",
+        )
+    ):
+        indicators.append("sql_error")
+    if "49" in response_body and "{{7*7}}" not in baseline_body:
+        indicators.append("ssti_evaluation")
+    if "root:x:" in response_body:
+        indicators.append("lfi_passwd")
+    status_changed = (
+        baseline_metadata.get("status") is not None
+        and response_metadata.get("status") is not None
+        and baseline_metadata.get("status") != response_metadata.get("status")
+    )
+    length_changed = len(baseline_body) != len(response_body)
+    return {
+        "baseline_status": baseline_metadata.get("status"),
+        "response_status": response_metadata.get("status"),
+        "status_changed": status_changed,
+        "baseline_length": len(baseline_body),
+        "response_length": len(response_body),
+        "length_delta": len(response_body) - len(baseline_body),
+        "length_changed": length_changed,
+        "indicators": indicators,
+        "interesting": bool(indicators or status_changed),
+    }
+
+
+def _active_finding(
+    summary: str,
+    *,
+    target: str,
+    payload: dict[str, str],
+    baseline: dict[str, Any],
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    evidence = _response_comparison(baseline, response)
+    evidence.update({"target": target, "payload": payload})
+    response.setdefault("metadata", {}).update(
+        {
+            "interaction": "active",
+            "target": target,
+            "payload": payload,
+            "judgment": evidence,
+        }
+    )
+    return _adapter_finding(summary, evidence)
 
 
 def _html_attr(attrs: str, name: str) -> str:

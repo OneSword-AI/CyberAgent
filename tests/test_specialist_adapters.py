@@ -222,16 +222,19 @@ def test_web_adapter_probes_paths_and_extracts_response_signals():
 
     result = WebToolAdapter(tool_executor=fake_tool_executor).execute(state)
 
-    assert [url for _, url, _ in calls] == [
+    assert [url for _, url, _ in calls[:5]] == [
         "http://web.test/",
         "http://web.test/robots.txt",
         "http://web.test/.git/HEAD",
         "http://web.test/admin",
         "http://web.test/login",
     ]
-    assert all(name == "http_get" and caller == "web_agent" for name, _, caller in calls)
+    assert calls[5][0] == "http_post"
+    assert calls[5][1] == "http://web.test/login"
+    assert all(caller == "web_agent" for _, _, caller in calls)
+    assert len(calls) == 12
     assert result["candidate_flags"] == ["flag{web_adapter}"]
-    assert result["summary"] == "Web Adapter probed 5 URL(s)."
+    assert result["summary"] == "Web Adapter probed 5 URL(s) and performed 7 active interaction(s)."
     findings = {finding["summary"]: finding["evidence"] for finding in result["findings"]}
     assert findings["Detected simple HTML form(s)."]["forms"][0]["inputs"] == [
         "username",
@@ -241,6 +244,16 @@ def test_web_adapter_probes_paths_and_extracts_response_signals():
         "id",
         "debug",
     ]
+    active = [
+        item for item in result["tool_outputs"]
+        if item["metadata"].get("interaction") == "active"
+    ]
+    assert active[0]["metadata"]["payload"] == {
+        "username": "admin",
+        "password": "admin",
+    }
+    assert active[1]["metadata"]["payload"] == {"id": "'"}
+    assert active[1]["metadata"]["judgment"]["baseline_length"] > 0
 
 
 def test_web_adapter_stops_requests_when_http_budget_is_exhausted():

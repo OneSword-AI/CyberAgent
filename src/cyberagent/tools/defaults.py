@@ -3,13 +3,14 @@ from typing import Any
 from cyberagent.safety import L0SafetyGate
 from cyberagent.tools.adapter import FunctionToolAdapter, ToolRegistry
 from cyberagent.tools.filesystem import inspect_file
-from cyberagent.tools.http import http_get
+from cyberagent.tools.http import http_get, http_post
 from cyberagent.tools.models import ToolResult
 from cyberagent.tools.shell import run_shell
 
 
 TOOL_ACTION_TYPES = {
     "http_get": "http.request",
+    "http_post": "http.request",
     "shell": "shell.run",
     "file_inspect": "file.inspect",
 }
@@ -27,6 +28,24 @@ def build_default_tool_registry() -> ToolRegistry:
                 headers=request.get("headers"),
                 timeout=request.get("timeout", 10),
                 max_chars=request.get("max_chars", 2000),
+                cookies=request.get("cookies"),
+                allow_redirects=request.get("allow_redirects", True),
+            ),
+        )
+    )
+    registry.register(
+        FunctionToolAdapter(
+            name="http_post",
+            description="Perform a bounded HTTP/HTTPS form-style POST request.",
+            input_schema={"required": ["url"]},
+            handler=lambda request: http_post(
+                request["url"],
+                data=request.get("data"),
+                headers=request.get("headers"),
+                timeout=request.get("timeout", 10),
+                max_chars=request.get("max_chars", 2000),
+                cookies=request.get("cookies"),
+                allow_redirects=request.get("allow_redirects", True),
             ),
         )
     )

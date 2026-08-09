@@ -6,7 +6,7 @@ def test_default_tool_registry_describes_basic_tools():
 
     names = {tool["name"] for tool in registry.describe_all()}
 
-    assert {"http_get", "shell", "file_inspect"} <= names
+    assert {"http_get", "http_post", "shell", "file_inspect"} <= names
 
 
 def test_execute_tool_denies_unsafe_request():
