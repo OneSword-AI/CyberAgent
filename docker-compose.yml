@@ -1,0 +1,15 @@
+services:
+  cyberagent:
+    build:
+      context: .
+    image: cyberagent:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CHALLENGE_LOCAL_JSON_DIR: /app/challenges
+    volumes:
+      - ./runs:/app/runs
+      - ./artifacts:/app/artifacts
+      - ./challenges:/app/challenges:ro
+    command: ["demo", "--save", "--output-dir", "runs"]
