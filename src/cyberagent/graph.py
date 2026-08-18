@@ -93,6 +93,7 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "controller_decisions": {},
         "loaded_skills": [],
         "skill_context": "",
+        "specialist_skill_contexts": {},
         "controller_round": 0,
         "max_controller_rounds": 2,
         "budget": initial_budget(),

@@ -2,7 +2,11 @@ from pathlib import Path
 
 from cyberagent.evidence import add_finding
 from cyberagent.models import ChallengeState
-from cyberagent.skills.loader import load_challenge_skills, render_skill_context
+from cyberagent.skills.loader import (
+    load_challenge_skills,
+    render_skill_context,
+    render_specialist_skill_contexts,
+)
 from cyberagent.trace import add_trace_event
 
 
@@ -25,6 +29,7 @@ def load_skills_for_challenge(state: ChallengeState) -> ChallengeState:
         **state,
         "loaded_skills": loaded_skills,
         "skill_context": render_skill_context(skills),
+        "specialist_skill_contexts": render_specialist_skill_contexts(skills),
     }
     next_state = add_trace_event(
         next_state,

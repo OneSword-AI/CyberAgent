@@ -111,6 +111,7 @@ def _placeholder_agent(
 ) -> SpecialistResult:
     if not _is_active(state, agent_name):
         return _skipped(agent_name, f"{display_name} was not selected for this challenge.")
+    agent_state = _with_agent_skill_context(state, agent_name)
     return _completed(
         agent_name,
         f"{display_name} received the challenge; no domain tool adapter is configured yet.",
@@ -122,6 +123,8 @@ def _placeholder_agent(
                     "title": state.get("title", ""),
                     "predicted_categories": state.get("predicted_categories", []),
                     "active_agents": state.get("active_agents", []),
+                    "loaded_skills": _loaded_skill_names_for_agent(state, agent_name),
+                    "skill_context": agent_state.get("specialist_skill_context", ""),
                 },
             )
         ],
@@ -144,9 +147,10 @@ def _run_with_adapter(
     if not _is_active(state, agent_name):
         return _skipped(agent_name, f"{display_name} was not selected for this challenge.")
 
+    agent_state = _with_agent_skill_context(state, agent_name)
     registry = adapters or build_default_specialist_adapters(tool_executor=execute_tool)
     try:
-        adapter_result = registry.get(adapter_name).execute(state)
+        adapter_result = registry.get(adapter_name).execute(agent_state)
     except Exception as exc:  # noqa: BLE001 - adapter failures become structured results
         return _completed(
             agent_name,
@@ -167,6 +171,8 @@ def _run_with_adapter(
                     "predicted_categories": state.get("predicted_categories", []),
                     "active_agents": state.get("active_agents", []),
                     "adapter": adapter_name,
+                    "loaded_skills": _loaded_skill_names_for_agent(state, agent_name),
+                    "skill_context": agent_state.get("specialist_skill_context", ""),
                 },
             ),
             *adapter_result["findings"],
@@ -208,6 +214,32 @@ def _completed(
     if error is not None:
         result["error"] = error
     return result
+
+
+def _with_agent_skill_context(
+    state: ChallengeState,
+    agent_name: str,
+) -> ChallengeState:
+    context = state.get("specialist_skill_contexts", {}).get(agent_name, "")
+    return {
+        **state,
+        "specialist_skill_context": context,
+    }
+
+
+def _loaded_skill_names_for_agent(
+    state: ChallengeState,
+    agent_name: str,
+) -> list[str]:
+    context = state.get("specialist_skill_contexts", {}).get(agent_name, "")
+    if not context:
+        return []
+    names = []
+    for skill in state.get("loaded_skills", []):
+        name = skill.get("name", "")
+        if name and f"## {name}" in context:
+            names.append(name)
+    return names
 
 
 def _finding(agent: str, summary: str, evidence: dict[str, Any]) -> dict[str, Any]:

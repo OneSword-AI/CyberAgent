@@ -7,6 +7,7 @@ from cyberagent.agents.specialists import (
     reverse_agent,
     web_agent,
 )
+from cyberagent.agents.tool_adapters import SpecialistToolAdapterRegistry
 from cyberagent.graph import initial_state
 
 
@@ -107,3 +108,40 @@ def test_web_agent_records_missing_target_tool_error():
     assert result["tool_outputs"][-1]["tool"] == "http_get"
     assert result["tool_outputs"][-1]["ok"] is False
     assert result["tool_outputs"][-1]["error"] == "missing remote target"
+
+
+def test_specialist_receives_agent_specific_skill_context():
+    class ContextAdapter:
+        name = "web"
+
+        def describe(self):
+            return {"name": self.name}
+
+        def execute(self, state: dict) -> dict:
+            assert "HTTP workflow" in state["specialist_skill_context"]
+            assert "Crypto workflow" not in state["specialist_skill_context"]
+            return {
+                "summary": "used skill context",
+                "findings": [],
+                "candidate_flags": [],
+                "tool_outputs": [],
+                "next_actions": [],
+            }
+
+    state = initial_state("skill-specialist")
+    state["active_agents"] = ["web_agent"]
+    state["loaded_skills"] = [
+        {"name": "ctf-web", "description": "web", "path": "skills/ctf-web/SKILL.md"},
+        {"name": "ctf-crypto", "description": "crypto", "path": "skills/ctf-crypto/SKILL.md"},
+    ]
+    state["specialist_skill_contexts"] = {
+        "web_agent": "## ctf-web\nHTTP workflow",
+        "crypto_agent": "## ctf-crypto\nCrypto workflow",
+    }
+    registry = SpecialistToolAdapterRegistry([ContextAdapter()])
+
+    result = web_agent(state, adapters=registry)
+
+    evidence = result["findings"][0]["evidence"]
+    assert evidence["loaded_skills"] == ["ctf-web"]
+    assert evidence["skill_context"] == "## ctf-web\nHTTP workflow"

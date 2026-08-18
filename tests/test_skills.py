@@ -5,6 +5,7 @@ from cyberagent.graph import initial_state
 from cyberagent.skills.loader import (
     load_challenge_skills,
     load_skill,
+    render_specialist_skill_contexts,
     render_skill_context,
 )
 
@@ -69,6 +70,29 @@ def test_render_skill_context_includes_description_and_body():
     assert "Workflow body." in context
 
 
+def test_render_specialist_skill_contexts_filters_by_agent():
+    contexts = render_specialist_skill_contexts(
+        [
+            {
+                "name": "ctf-web",
+                "description": "Web workflow.",
+                "body": "# CTF Web\n\nProbe HTTP.",
+                "path": "skills/ctf-web/SKILL.md",
+            },
+            {
+                "name": "ctf-crypto",
+                "description": "Crypto workflow.",
+                "body": "# CTF Crypto\n\nAnalyze RSA.",
+                "path": "skills/ctf-crypto/SKILL.md",
+            },
+        ]
+    )
+
+    assert "ctf-web" in contexts["web_agent"]
+    assert "ctf-crypto" not in contexts["web_agent"]
+    assert "ctf-crypto" in contexts["crypto_agent"]
+
+
 def test_skill_loader_node_writes_state_and_finding():
     state = initial_state("skill-node")
     state["remote_targets"] = ["https://web.test/"]
@@ -77,5 +101,6 @@ def test_skill_loader_node_writes_state_and_finding():
 
     assert result["loaded_skills"][0]["name"] == "ctf-web"
     assert "ctf-web" in result["skill_context"]
+    assert "ctf-web" in result["specialist_skill_contexts"]["web_agent"]
     assert result["findings"][-1]["agent"] == "skill_loader"
     assert result["trace"][-1]["event"] == "skills.load"

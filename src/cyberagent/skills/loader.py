@@ -17,6 +17,26 @@ CATEGORY_TO_SKILL = {
     "Other": "ctf-misc",
 }
 
+AGENT_TO_SKILLS = {
+    "web_agent": ("ctf-web",),
+    "pwn_agent": ("ctf-pwn",),
+    "reverse_agent": ("ctf-reverse", "ctf-mobile"),
+    "crypto_agent": ("ctf-crypto",),
+    "misc_agent": ("ctf-misc", "ctf-forensics"),
+    "forensics_agent": ("ctf-forensics", "ctf-misc"),
+    "other_agent": (
+        "ctf-web",
+        "ctf-pwn",
+        "ctf-reverse",
+        "ctf-crypto",
+        "ctf-misc",
+        "ctf-forensics",
+        "ctf-osint",
+        "ctf-mobile",
+        "ctf-cloud",
+    ),
+}
+
 KEYWORD_TO_SKILL = {
     "web": "ctf-web",
     "http": "ctf-web",
@@ -109,6 +129,28 @@ def render_skill_context(skills: list[Skill], *, max_body_chars: int = 1800) -> 
             )
         )
     return "\n\n".join(sections)
+
+
+def render_specialist_skill_contexts(
+    skills: list[Skill],
+    *,
+    max_body_chars: int = 1800,
+) -> dict[str, str]:
+    """Render loaded skill context per specialist agent."""
+    skills_by_name = {skill["name"]: skill for skill in skills}
+    contexts: dict[str, str] = {}
+    for agent_name, skill_names in AGENT_TO_SKILLS.items():
+        matched = [
+            skills_by_name[skill_name]
+            for skill_name in skill_names
+            if skill_name in skills_by_name
+        ]
+        if matched:
+            contexts[agent_name] = render_skill_context(
+                matched,
+                max_body_chars=max_body_chars,
+            )
+    return contexts
 
 
 def _skills_dir(skills_dir: str | Path | None) -> Path:
