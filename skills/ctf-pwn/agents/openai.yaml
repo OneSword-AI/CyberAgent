@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF Pwn"
+  short_description: "Binary exploitation triage and exploit planning."
+  default_prompt: "Use this skill to analyze and solve a CTF pwn challenge."

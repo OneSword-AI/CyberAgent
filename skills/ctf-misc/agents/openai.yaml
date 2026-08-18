@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF Misc"
+  short_description: "Miscellaneous CTF triage and puzzle workflow."
+  default_prompt: "Use this skill to analyze and solve a CTF misc challenge."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF Forensics"
+  short_description: "Forensics artifact triage and evidence extraction."
+  default_prompt: "Use this skill to analyze and solve a CTF forensics challenge."

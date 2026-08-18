@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF OSINT"
+  short_description: "OSINT challenge investigation and source validation."
+  default_prompt: "Use this skill to analyze and solve a CTF OSINT challenge."

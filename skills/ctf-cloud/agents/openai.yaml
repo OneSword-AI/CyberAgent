@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF Cloud"
+  short_description: "Cloud and container challenge triage workflow."
+  default_prompt: "Use this skill to analyze and solve a CTF cloud or container challenge."

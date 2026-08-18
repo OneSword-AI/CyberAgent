@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF Crypto"
+  short_description: "Cryptography challenge analysis and attack workflow."
+  default_prompt: "Use this skill to analyze and solve a CTF crypto challenge."

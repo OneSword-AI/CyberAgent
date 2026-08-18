@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF Reverse"
+  short_description: "Reverse engineering challenge triage and solution workflow."
+  default_prompt: "Use this skill to analyze and solve a CTF reverse engineering challenge."

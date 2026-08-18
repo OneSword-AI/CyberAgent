@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF Web"
+  short_description: "Web challenge triage and exploitation workflow."
+  default_prompt: "Use this skill to analyze and solve a CTF Web challenge."
