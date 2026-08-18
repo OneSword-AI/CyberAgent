@@ -49,6 +49,8 @@ def build_controller_prompt(state: ChallengeState) -> str:
 已有计划：{state.get("plan", "")}
 已有活动 Agent：{json.dumps(state.get("active_agents", []), ensure_ascii=False)}
 已有信号：{json.dumps(state.get("signals", []), ensure_ascii=False)}
+已加载的 CTF Skill 指令：
+{state.get("skill_context", "")}
 允许的分类：{", ".join(KNOWN_CATEGORIES)}
 允许的复杂度：{", ".join(KNOWN_COMPLEXITIES)}
 允许的 next_agents：{", ".join(KNOWN_AGENT_NAMES)}

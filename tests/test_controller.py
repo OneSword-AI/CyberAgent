@@ -25,6 +25,15 @@ def test_controller_prompt_includes_context():
     assert "stop_condition" in prompt
 
 
+def test_controller_prompt_includes_skill_context():
+    state = initial_state("controller-skill")
+    state["skill_context"] = "## ctf-web\nUse bounded active interaction."
+    prompt = build_controller_prompt(state)
+
+    assert "已加载的 CTF Skill 指令" in prompt
+    assert "Use bounded active interaction." in prompt
+
+
 def test_parse_controller_response_validates_all_fields():
     result = parse_controller_response(
         '{"goal":"get flag","strategy":"probe","predicted_categories":["Web"],'

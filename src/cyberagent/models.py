@@ -41,6 +41,8 @@ class ChallengeState(TypedDict):
     plan: Annotated[str, _last]
     plan_rationale: Annotated[str, _last]
     controller_decisions: Annotated[dict[str, Any], _last]
+    loaded_skills: Annotated[list[dict[str, Any]], _last]
+    skill_context: Annotated[str, _last]
     controller_round: Annotated[int, _last]
     max_controller_rounds: Annotated[int, _last]
     budget: Annotated[dict[str, Any], _last]
@@ -64,6 +66,7 @@ class ChallengeState(TypedDict):
 
     challenge_id: NotRequired[str]
     artifacts_dir: NotRequired[str]
+    skills_dir: NotRequired[str]
     provider_name: NotRequired[str]
     raw_challenge: NotRequired[dict[str, Any]]
     flag_format: NotRequired[str]

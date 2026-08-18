@@ -12,6 +12,7 @@ from cyberagent.agents.flag_submitter import submit_flag
 from cyberagent.agents.flag_verifier import verify_flag
 from cyberagent.agents.foundation_node import run_foundation_agents
 from cyberagent.agents.retry import retry_agent
+from cyberagent.agents.skill_loader import load_skills_for_challenge
 from cyberagent.budget import initial_budget, initial_budget_usage
 from cyberagent.models import ChallengeState
 from cyberagent.providers import fetch_challenge
@@ -23,6 +24,7 @@ def build_graph():
     graph.add_node("fetch_challenge", _as_delta_node(fetch_challenge))
     graph.add_node("download_attachments", _as_delta_node(download_attachments))
     graph.add_node("foundation_agents", _as_delta_node(run_foundation_agents))
+    graph.add_node("load_skills", _as_delta_node(load_skills_for_challenge))
     graph.add_node("controller_agent", _as_delta_node(run_controller_agent))
     graph.add_node("blackboard_specialists", _as_delta_node(run_blackboard_specialists))
     graph.add_node("extract_candidate_flags", _as_delta_node(extract_candidate_flags))
@@ -34,7 +36,8 @@ def build_graph():
     graph.set_entry_point("fetch_challenge")
     graph.add_edge("fetch_challenge", "download_attachments")
     graph.add_edge("download_attachments", "foundation_agents")
-    graph.add_edge("foundation_agents", "controller_agent")
+    graph.add_edge("foundation_agents", "load_skills")
+    graph.add_edge("load_skills", "controller_agent")
     graph.add_conditional_edges(
         "controller_agent",
         _controller_route,
@@ -88,6 +91,8 @@ def initial_state(challenge_id: str) -> ChallengeState:
         "plan": "",
         "plan_rationale": "",
         "controller_decisions": {},
+        "loaded_skills": [],
+        "skill_context": "",
         "controller_round": 0,
         "max_controller_rounds": 2,
         "budget": initial_budget(),
