@@ -105,3 +105,52 @@ def test_blackboard_specialists_match_multiple_recipients_without_fixed_routes()
     task_signal = result["signals"][0]
     assert task_signal["status"] == "processed"
     assert task_signal["delivered_to"] == ["crypto_agent", "misc_agent"]
+
+
+def test_blackboard_specialists_compete_for_broadcast_signal_by_category():
+    state = initial_state("bb-broadcast-category")
+    state["predicted_categories"] = ["Crypto", "Forensics"]
+    state["signals"] = [
+        make_signal(
+            type="observation",
+            challenge_id="bb-broadcast-category",
+            source="observer",
+            payload={"summary": "crypto material and traffic artifact observed"},
+            provenance="inference",
+        )
+    ]
+
+    result = run_blackboard_specialists(state)
+
+    assert result["active_agents"] == ["crypto_agent", "forensics_agent"]
+    assert [item["agent"] for item in result["specialist_results"]] == [
+        "crypto_agent",
+        "forensics_agent",
+    ]
+    task_signal = result["signals"][0]
+    assert task_signal["recipients"] == ["crypto_agent", "forensics_agent"]
+    assert task_signal["delivered_to"] == ["crypto_agent", "forensics_agent"]
+    assert task_signal["status"] == "processed"
+    assert result["trace"][-1]["details"]["mode"] == "autonomous_signal_competition"
+
+
+def test_blackboard_specialists_match_broadcast_signal_by_listened_content():
+    state = initial_state("bb-broadcast-pcap")
+    state["signals"] = [
+        make_signal(
+            type="challenge_input",
+            challenge_id="bb-broadcast-pcap",
+            source="provider",
+            payload={"attachments": ["traffic.pcap"]},
+            provenance="input",
+        )
+    ]
+
+    result = run_blackboard_specialists(state)
+
+    assert result["active_agents"] == ["forensics_agent"]
+    assert result["specialist_results"][0]["agent"] == "forensics_agent"
+    task_signal = result["signals"][0]
+    assert task_signal["recipients"] == ["forensics_agent"]
+    assert task_signal["delivered_to"] == ["forensics_agent"]
+    assert task_signal["status"] == "processed"
