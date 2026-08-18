@@ -1,3 +1,6 @@
+import base64
+import binascii
+import json
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -300,6 +303,83 @@ class PlaceholderToolAdapter:
         }
 
 
+class CryptoAdapter:
+    name = "crypto"
+    max_encoded_candidates = 8
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": "Identify encoding layers, common RSA weaknesses, and AES mode clues from challenge text and prior tool outputs.",
+            "capabilities": [
+                "encoding_detect",
+                "rsa_weakness_detect",
+                "aes_mode_detect",
+                "flag_extract",
+            ],
+        }
+
+    def execute(self, state: ChallengeState) -> SpecialistAdapterResult:
+        text = _collect_crypto_text(state)
+        encoding_findings, encoding_flags = _detect_encoded_values(
+            text,
+            state.get("flag_format"),
+            limit=self.max_encoded_candidates,
+        )
+        rsa_findings = _detect_rsa_weaknesses(text)
+        aes_findings = _detect_aes_modes(text)
+        candidate_flags = merge_candidate_flags(
+            extract_flags(text, state.get("flag_format")),
+            encoding_flags,
+        )
+        findings = [
+            _crypto_finding("Detected encoded value(s).", {"encodings": encoding_findings})
+        ] if encoding_findings else []
+        if rsa_findings:
+            findings.append(
+                _crypto_finding(
+                    "Detected RSA parameter weakness clue(s).",
+                    {"rsa": rsa_findings},
+                )
+            )
+        if aes_findings:
+            findings.append(
+                _crypto_finding(
+                    "Detected AES mode clue(s).",
+                    {"aes": aes_findings},
+                )
+            )
+        analysis = {
+            "encodings": encoding_findings,
+            "rsa": rsa_findings,
+            "aes": aes_findings,
+            "candidate_flags": candidate_flags,
+        }
+        next_actions = _crypto_next_actions(analysis)
+        return {
+            "summary": _crypto_summary(analysis),
+            "findings": findings,
+            "candidate_flags": candidate_flags,
+            "tool_outputs": [
+                {
+                    "caller": "crypto_agent",
+                    "tool": "crypto_analysis",
+                    "ok": True,
+                    "output": json.dumps(analysis, ensure_ascii=False, sort_keys=True),
+                    "error": None,
+                    "exit_code": 0,
+                    "metadata": {
+                        "analysis": "crypto_static",
+                        "encoding_count": len(encoding_findings),
+                        "rsa_count": len(rsa_findings),
+                        "aes_count": len(aes_findings),
+                    },
+                }
+            ],
+            "next_actions": next_actions,
+        }
+
+
 class AttachmentAnalysisAdapter:
     name = "misc"
     agent_name = "misc_agent"
@@ -454,7 +534,7 @@ def build_default_specialist_adapters(
     return SpecialistToolAdapterRegistry(
         [
             WebToolAdapter(tool_executor=tool_executor),
-            PlaceholderToolAdapter("crypto", "Crypto"),
+            CryptoAdapter(),
             AttachmentAnalysisAdapter(tool_executor=tool_executor),
             ForensicsAdapter(tool_executor=tool_executor),
         ]
@@ -494,6 +574,279 @@ def _tool_output(result: ToolResult, *, caller: str) -> dict[str, Any]:
 def _looks_like_zip(path: str, file_output: str) -> bool:
     suffix = Path(path).suffix.lower()
     return suffix == ".zip" or "zip archive" in file_output.lower()
+
+
+def _collect_crypto_text(state: ChallengeState) -> str:
+    parts = [
+        state.get("title", ""),
+        state.get("description", ""),
+        state.get("category_hint", ""),
+        state.get("flag_format", ""),
+        state.get("specialist_skill_context", ""),
+        json.dumps(state.get("raw_challenge", {}), ensure_ascii=False),
+        " ".join(state.get("attachments", [])),
+    ]
+    for output in state.get("tool_outputs", []):
+        parts.append(str(output.get("output", "")))
+        parts.append(json.dumps(output.get("metadata", {}), ensure_ascii=False))
+    for finding in state.get("findings", []):
+        parts.append(str(finding.get("summary", "")))
+        parts.append(json.dumps(finding.get("evidence", {}), ensure_ascii=False))
+    return "\n".join(part for part in parts if part)
+
+
+def _detect_encoded_values(
+    text: str,
+    flag_format: str | None,
+    *,
+    limit: int,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    findings: list[dict[str, Any]] = []
+    flags: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for kind, value in _encoded_candidates(text):
+        key = (kind, value)
+        if key in seen:
+            continue
+        seen.add(key)
+        decoded = _decode_candidate(kind, value)
+        if decoded is None or not _is_useful_decoding(decoded):
+            continue
+        decoded_flags = extract_flags(decoded, flag_format)
+        flags = merge_candidate_flags(flags, decoded_flags)
+        findings.append(
+            {
+                "encoding": kind,
+                "value": value[:120],
+                "decoded_preview": decoded[:160],
+                "decoded_flags": decoded_flags,
+            }
+        )
+        if len(findings) >= limit:
+            break
+    return findings, flags
+
+
+def _encoded_candidates(text: str) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    for match in re.finditer(r"\b(?:0x)?[0-9a-fA-F]{16,}\b", text):
+        value = match.group(0)
+        if value.startswith(("0x", "0X")):
+            value = value[2:]
+        if len(value) % 2 == 0:
+            candidates.append(("hex", value))
+    for match in re.finditer(r"\b[A-Za-z0-9+/]{16,}={0,2}\b", text):
+        value = match.group(0)
+        if len(value) % 4 == 0 and not re.fullmatch(r"[0-9a-fA-F]+", value):
+            candidates.append(("base64", value))
+    return candidates
+
+
+def _decode_candidate(kind: str, value: str) -> str | None:
+    try:
+        if kind == "hex":
+            return bytes.fromhex(value).decode("utf-8", errors="replace")
+        if kind == "base64":
+            return base64.b64decode(value, validate=True).decode("utf-8", errors="replace")
+    except (ValueError, binascii.Error):
+        return None
+    return None
+
+
+def _is_useful_decoding(value: str) -> bool:
+    if not value.strip():
+        return False
+    printable = sum(1 for char in value if char.isprintable() or char in "\r\n\t")
+    return printable / max(len(value), 1) >= 0.85
+
+
+def _detect_rsa_weaknesses(text: str) -> list[dict[str, Any]]:
+    values = _extract_named_ints(text, names=("n", "e", "c", "p", "q", "d"))
+    findings: list[dict[str, Any]] = []
+    if "p" in values and "q" in values:
+        findings.append(
+            {
+                "kind": "factor_provided",
+                "reason": "both p and q appear in challenge material",
+                "parameters": sorted({"p", "q", *values.keys()}),
+            }
+        )
+    for e in values.get("e", []):
+        if e in {3, 5, 17}:
+            findings.append(
+                {
+                    "kind": "small_public_exponent",
+                    "reason": f"e={e} may allow low-exponent attacks without padding",
+                    "e": e,
+                }
+            )
+        if e == 1:
+            findings.append(
+                {
+                    "kind": "invalid_public_exponent",
+                    "reason": "e=1 means ciphertext can directly expose plaintext",
+                    "e": e,
+                }
+            )
+    if "n" in values and "e" in values and "c" in values:
+        findings.append(
+            {
+                "kind": "standard_rsa_tuple",
+                "reason": "n/e/c tuple detected; try factoring n, low exponent, or padding weakness",
+                "parameters": ["n", "e", "c"],
+            }
+        )
+    lowered = text.lower()
+    if any(token in lowered for token in ("rsa", "public key", "modulus", "ciphertext")):
+        if not findings:
+            findings.append(
+                {
+                    "kind": "rsa_clue",
+                    "reason": "RSA-related vocabulary detected but parameters are incomplete",
+                    "parameters": sorted(values),
+                }
+            )
+    return findings
+
+
+def _extract_named_ints(text: str, *, names: tuple[str, ...]) -> dict[str, list[int]]:
+    values: dict[str, list[int]] = {}
+    names_pattern = "|".join(re.escape(name) for name in names)
+    pattern = re.compile(
+        rf"\b(?P<name>{names_pattern})\b\s*(?:=|:)\s*(?P<value>0x[0-9a-fA-F]+|\d+)",
+        flags=re.IGNORECASE,
+    )
+    for match in pattern.finditer(text):
+        name = match.group("name").lower()
+        raw = match.group("value")
+        value = int(raw, 16) if raw.lower().startswith("0x") else int(raw)
+        values.setdefault(name, [])
+        if value not in values[name]:
+            values[name].append(value)
+    return values
+
+
+def _detect_aes_modes(text: str) -> list[dict[str, Any]]:
+    lowered = text.lower()
+    if "aes" not in lowered and not any(mode in lowered for mode in ("ecb", "cbc", "ctr", "gcm")):
+        return []
+    findings: list[dict[str, Any]] = []
+    for mode in ("ecb", "cbc", "ctr", "gcm", "cfb", "ofb"):
+        if re.search(rf"\b{mode}\b", lowered):
+            findings.append(
+                {
+                    "kind": "mode_keyword",
+                    "mode": mode.upper(),
+                    "reason": f"{mode.upper()} mode keyword appears in challenge material",
+                }
+            )
+    repeated_blocks = _detect_repeated_cipher_blocks(text)
+    if repeated_blocks:
+        findings.append(
+            {
+                "kind": "repeated_cipher_blocks",
+                "mode": "ECB",
+                "reason": "repeated 16-byte ciphertext blocks suggest ECB or repeated plaintext structure",
+                "samples": repeated_blocks,
+            }
+        )
+    if "cbc" in lowered and "iv" not in lowered:
+        findings.append(
+            {
+                "kind": "missing_iv_clue",
+                "mode": "CBC",
+                "reason": "CBC is mentioned but no IV clue was found",
+            }
+        )
+    return findings
+
+
+def _detect_repeated_cipher_blocks(text: str) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    for kind, value in _encoded_candidates(text):
+        data = _decode_bytes(kind, value)
+        if data is None or len(data) < 32:
+            continue
+        blocks = [data[index : index + 16] for index in range(0, len(data), 16)]
+        counts = {
+            block: blocks.count(block)
+            for block in set(blocks)
+            if len(block) == 16 and blocks.count(block) > 1
+        }
+        if counts:
+            samples.append(
+                {
+                    "encoding": kind,
+                    "value": value[:120],
+                    "repeated_blocks": len(counts),
+                }
+            )
+    return samples[:3]
+
+
+def _decode_bytes(kind: str, value: str) -> bytes | None:
+    try:
+        if kind == "hex":
+            return bytes.fromhex(value)
+        if kind == "base64":
+            return base64.b64decode(value, validate=True)
+    except (ValueError, binascii.Error):
+        return None
+    return None
+
+
+def _crypto_next_actions(analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    if analysis["candidate_flags"]:
+        return actions
+    if analysis["rsa"]:
+        actions.append(
+            {
+                "kind": "crypto_rsa_attack",
+                "reason": "RSA parameters or weakness clues detected; try factoring/low-exponent/padding attack next",
+            }
+        )
+    if analysis["aes"]:
+        actions.append(
+            {
+                "kind": "crypto_aes_analysis",
+                "reason": "AES mode clues detected; verify mode assumptions, IV handling, and block structure",
+            }
+        )
+    if analysis["encodings"]:
+        actions.append(
+            {
+                "kind": "crypto_decode_chain",
+                "reason": "encoded values decoded to printable data but no flag was confirmed",
+            }
+        )
+    if not actions:
+        actions.append(
+            {
+                "kind": "crypto_more_evidence",
+                "reason": "no strong crypto primitive or encoding clue was found",
+            }
+        )
+    return actions
+
+
+def _crypto_summary(analysis: dict[str, Any]) -> str:
+    return (
+        "Crypto Adapter analyzed static challenge material: "
+        f"{len(analysis['encodings'])} encoding clue(s), "
+        f"{len(analysis['rsa'])} RSA clue(s), "
+        f"{len(analysis['aes'])} AES clue(s), "
+        f"{len(analysis['candidate_flags'])} candidate flag(s)."
+    )
+
+
+def _crypto_finding(summary: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "finding",
+        "agent": "crypto_agent",
+        "summary": summary,
+        "evidence": evidence,
+    }
 
 
 def _count_local_budget_use(state: ChallengeState, output: dict[str, Any]) -> ChallengeState:

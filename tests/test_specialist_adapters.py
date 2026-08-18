@@ -2,6 +2,7 @@ from cyberagent.agents.specialist_signals import publish_specialist_results
 from cyberagent.agents.specialists import crypto_agent, forensics_agent, misc_agent, web_agent
 from cyberagent.agents.tool_adapters import (
     AttachmentAnalysisAdapter,
+    CryptoAdapter,
     ForensicsAdapter,
     SpecialistToolAdapterRegistry,
     WebToolAdapter,
@@ -49,12 +50,16 @@ def test_default_specialist_adapters_expose_web_crypto_misc_and_forensics():
         "forensics",
     }
     misc_description = next(item for item in descriptions if item["name"] == "misc")
+    crypto_description = next(item for item in descriptions if item["name"] == "crypto")
     forensics_description = next(item for item in descriptions if item["name"] == "forensics")
     web_description = next(item for item in descriptions if item["name"] == "web")
     assert {"path_probe", "flag_extract", "form_detect", "parameter_detect"} <= set(
         web_description["capabilities"]
     )
     assert {"file", "strings", "unzip_list"} <= set(misc_description["capabilities"])
+    assert {"encoding_detect", "rsa_weakness_detect", "aes_mode_detect"} <= set(
+        crypto_description["capabilities"]
+    )
     assert {"file", "strings", "unzip_list", "flag_extract"} <= set(
         forensics_description["capabilities"]
     )
@@ -205,6 +210,44 @@ def test_forensics_adapter_reuses_basic_attachment_analysis_tools():
     assert result["summary"] == "Forensics Adapter analyzed 1 downloaded attachment(s)."
     assert result["candidate_flags"] == ["flag{forensics_artifact}"]
     assert result["findings"][0]["agent"] == "forensics_agent"
+
+
+def test_crypto_adapter_detects_encoded_flags():
+    state = initial_state("crypto-encoding")
+    state["description"] = "The note says 666c61677b6865785f6465636f64657d"
+
+    result = CryptoAdapter().execute(state)
+
+    assert result["candidate_flags"] == ["flag{hex_decode}"]
+    assert result["tool_outputs"][0]["tool"] == "crypto_analysis"
+    assert result["tool_outputs"][0]["metadata"]["encoding_count"] == 1
+    assert result["findings"][0]["summary"] == "Detected encoded value(s)."
+
+
+def test_crypto_adapter_detects_rsa_weakness_clues():
+    state = initial_state("crypto-rsa")
+    state["description"] = "RSA params: n=3233, e=3, c=42, p=61, q=53"
+
+    result = CryptoAdapter().execute(state)
+
+    rsa = result["findings"][0]["evidence"]["rsa"]
+    kinds = {item["kind"] for item in rsa}
+    assert {"factor_provided", "small_public_exponent", "standard_rsa_tuple"} <= kinds
+    assert result["next_actions"][0]["kind"] == "crypto_rsa_attack"
+
+
+def test_crypto_adapter_detects_aes_mode_and_repeated_blocks():
+    repeated_hex = "00112233445566778899aabbccddeeff" * 2
+    state = initial_state("crypto-aes")
+    state["description"] = f"AES ECB ciphertext {repeated_hex}"
+
+    result = CryptoAdapter().execute(state)
+
+    findings = {finding["summary"]: finding["evidence"] for finding in result["findings"]}
+    aes = findings["Detected AES mode clue(s)."]["aes"]
+    kinds = {item["kind"] for item in aes}
+    assert {"mode_keyword", "repeated_cipher_blocks"} <= kinds
+    assert "crypto_aes_analysis" in {action["kind"] for action in result["next_actions"]}
 
 
 def test_misc_agent_attachment_results_publish_to_blackboard():
