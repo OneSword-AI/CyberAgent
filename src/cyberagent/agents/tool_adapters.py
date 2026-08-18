@@ -302,6 +302,8 @@ class PlaceholderToolAdapter:
 
 class AttachmentAnalysisAdapter:
     name = "misc"
+    agent_name = "misc_agent"
+    domain = "Misc"
 
     def __init__(
         self,
@@ -313,8 +315,11 @@ class AttachmentAnalysisAdapter:
     def describe(self) -> dict[str, Any]:
         return {
             "name": self.name,
-            "description": "Analyze downloaded attachments with basic file, strings, and unzip listing commands.",
-            "capabilities": ["file", "strings", "unzip_list"],
+            "description": (
+                f"Analyze downloaded {self.domain} attachments with basic file, "
+                "strings, and unzip listing commands."
+            ),
+            "capabilities": ["file", "strings", "unzip_list", "flag_extract"],
         }
 
     def execute(self, state: ChallengeState) -> SpecialistAdapterResult:
@@ -325,7 +330,7 @@ class AttachmentAnalysisAdapter:
         ]
         if not attachments:
             return {
-                "summary": "Misc Adapter found no downloaded attachments to analyze.",
+                "summary": f"{self.domain} Adapter found no downloaded attachments to analyze.",
                 "findings": [],
                 "candidate_flags": [],
                 "tool_outputs": [],
@@ -339,6 +344,7 @@ class AttachmentAnalysisAdapter:
 
         tool_outputs: list[dict[str, Any]] = []
         findings: list[dict[str, Any]] = []
+        candidate_flags: list[str] = []
         budget_state = state
         for attachment in attachments:
             path = str(attachment["path"])
@@ -350,6 +356,10 @@ class AttachmentAnalysisAdapter:
                 "path": path,
             }
             tool_outputs.append(file_output)
+            candidate_flags = merge_candidate_flags(
+                candidate_flags,
+                extract_flags(str(file_output.get("output", "")), state.get("flag_format")),
+            )
 
             strings_output = self._run_shell(f"strings -n 4 {quote(path)} | head -200", budget_state)
             budget_state = _count_local_budget_use(budget_state, strings_output)
@@ -359,6 +369,10 @@ class AttachmentAnalysisAdapter:
                 "path": path,
             }
             tool_outputs.append(strings_output)
+            candidate_flags = merge_candidate_flags(
+                candidate_flags,
+                extract_flags(str(strings_output.get("output", "")), state.get("flag_format")),
+            )
 
             if _looks_like_zip(path, file_output.get("output", "")):
                 unzip_output = self._run_shell(f"unzip -l {quote(path)}", budget_state)
@@ -369,11 +383,15 @@ class AttachmentAnalysisAdapter:
                     "path": path,
                 }
                 tool_outputs.append(unzip_output)
+                candidate_flags = merge_candidate_flags(
+                    candidate_flags,
+                    extract_flags(str(unzip_output.get("output", "")), state.get("flag_format")),
+                )
 
             findings.append(
                 {
                     "kind": "finding",
-                    "agent": "misc_agent",
+                    "agent": self.agent_name,
                     "summary": f"Analyzed attachment {Path(path).name}.",
                     "evidence": {
                         "path": path,
@@ -383,9 +401,9 @@ class AttachmentAnalysisAdapter:
             )
 
         return {
-            "summary": f"Misc Adapter analyzed {len(attachments)} downloaded attachment(s).",
+            "summary": f"{self.domain} Adapter analyzed {len(attachments)} downloaded attachment(s).",
             "findings": findings,
-            "candidate_flags": [],
+            "candidate_flags": candidate_flags,
             "tool_outputs": tool_outputs,
             "next_actions": [],
         }
@@ -394,12 +412,18 @@ class AttachmentAnalysisAdapter:
         if not budget_allows_tool(state, "shell"):
             return _tool_output(
                 budget_denied_tool_result("shell", budget_exhaustion_reason(state, "shell")),
-                caller="misc_agent",
+                caller=self.agent_name,
             )
         return _tool_output(
-            self._tool_executor("shell", {"command": command}, caller="misc_agent"),
-            caller="misc_agent",
+            self._tool_executor("shell", {"command": command}, caller=self.agent_name),
+            caller=self.agent_name,
         )
+
+
+class ForensicsAdapter(AttachmentAnalysisAdapter):
+    name = "forensics"
+    agent_name = "forensics_agent"
+    domain = "Forensics"
 
 
 class SpecialistToolAdapterRegistry:
@@ -432,6 +456,7 @@ def build_default_specialist_adapters(
             WebToolAdapter(tool_executor=tool_executor),
             PlaceholderToolAdapter("crypto", "Crypto"),
             AttachmentAnalysisAdapter(tool_executor=tool_executor),
+            ForensicsAdapter(tool_executor=tool_executor),
         ]
     )
 

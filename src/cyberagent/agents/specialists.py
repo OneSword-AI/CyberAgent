@@ -42,8 +42,18 @@ def misc_agent(
     return _run_with_adapter(state, "misc_agent", "Misc Agent", "misc", adapters)
 
 
-def forensics_agent(state: ChallengeState) -> SpecialistResult:
-    return _placeholder_agent(state, "forensics_agent", "Forensics Agent")
+def forensics_agent(
+    state: ChallengeState,
+    *,
+    adapters: SpecialistToolAdapterRegistry | None = None,
+) -> SpecialistResult:
+    return _run_with_adapter(
+        state,
+        "forensics_agent",
+        "Forensics Agent",
+        "forensics",
+        adapters,
+    )
 
 
 def other_agent(state: ChallengeState) -> SpecialistResult:

@@ -1,7 +1,8 @@
 from cyberagent.agents.specialist_signals import publish_specialist_results
-from cyberagent.agents.specialists import crypto_agent, misc_agent, web_agent
+from cyberagent.agents.specialists import crypto_agent, forensics_agent, misc_agent, web_agent
 from cyberagent.agents.tool_adapters import (
     AttachmentAnalysisAdapter,
+    ForensicsAdapter,
     SpecialistToolAdapterRegistry,
     WebToolAdapter,
     build_default_specialist_adapters,
@@ -37,7 +38,7 @@ class FakeSpecialistAdapter:
         }
 
 
-def test_default_specialist_adapters_expose_web_crypto_and_misc():
+def test_default_specialist_adapters_expose_web_crypto_misc_and_forensics():
     registry = build_default_specialist_adapters()
 
     descriptions = registry.describe_all()
@@ -45,13 +46,18 @@ def test_default_specialist_adapters_expose_web_crypto_and_misc():
         "web",
         "crypto",
         "misc",
+        "forensics",
     }
     misc_description = next(item for item in descriptions if item["name"] == "misc")
+    forensics_description = next(item for item in descriptions if item["name"] == "forensics")
     web_description = next(item for item in descriptions if item["name"] == "web")
     assert {"path_probe", "flag_extract", "form_detect", "parameter_detect"} <= set(
         web_description["capabilities"]
     )
     assert {"file", "strings", "unzip_list"} <= set(misc_description["capabilities"])
+    assert {"file", "strings", "unzip_list", "flag_extract"} <= set(
+        forensics_description["capabilities"]
+    )
 
 
 def test_specialists_can_use_replacement_adapters():
@@ -60,6 +66,7 @@ def test_specialists_can_use_replacement_adapters():
             FakeSpecialistAdapter("web", "custom web adapter"),
             FakeSpecialistAdapter("crypto", "custom crypto adapter"),
             FakeSpecialistAdapter("misc", "custom misc adapter"),
+            FakeSpecialistAdapter("forensics", "custom forensics adapter"),
         ]
     )
 
@@ -69,17 +76,22 @@ def test_specialists_can_use_replacement_adapters():
     crypto_state["active_agents"] = ["crypto_agent"]
     misc_state = initial_state("misc-adapter")
     misc_state["active_agents"] = ["misc_agent"]
+    forensics_state = initial_state("forensics-adapter")
+    forensics_state["active_agents"] = ["forensics_agent"]
 
     web_result = web_agent(web_state, adapters=registry)
     crypto_result = crypto_agent(crypto_state, adapters=registry)
     misc_result = misc_agent(misc_state, adapters=registry)
+    forensics_result = forensics_agent(forensics_state, adapters=registry)
 
     assert web_result["summary"] == "custom web adapter"
     assert crypto_result["summary"] == "custom crypto adapter"
     assert misc_result["summary"] == "custom misc adapter"
+    assert forensics_result["summary"] == "custom forensics adapter"
     assert web_result["candidate_flags"] == ["flag{web}"]
     assert crypto_result["candidate_flags"] == ["flag{crypto}"]
     assert misc_result["candidate_flags"] == ["flag{misc}"]
+    assert forensics_result["candidate_flags"] == ["flag{forensics}"]
 
 
 def test_attachment_analysis_adapter_runs_basic_file_tools():
@@ -117,6 +129,7 @@ def test_attachment_analysis_adapter_runs_basic_file_tools():
     ]
     assert all(caller == "misc_agent" for _, _, caller in calls)
     assert result["summary"] == "Misc Adapter analyzed 1 downloaded attachment(s)."
+    assert result["candidate_flags"] == ["flag{inside_zip}"]
     assert [output["metadata"]["analysis"] for output in result["tool_outputs"]] == [
         "file",
         "strings",
@@ -155,6 +168,43 @@ def test_attachment_analysis_adapter_stops_shell_when_budget_is_exhausted():
     assert calls == ["file -b /tmp/note.txt"]
     assert result["tool_outputs"][1]["metadata"]["budget_denied"] is True
     assert result["tool_outputs"][1]["tool"] == "shell"
+
+
+def test_forensics_adapter_reuses_basic_attachment_analysis_tools():
+    calls = []
+
+    def fake_tool_executor(name: str, request: dict, *, caller: str) -> dict:
+        calls.append((name, request["command"], caller))
+        output = "PNG image data" if request["command"].startswith("file ") else "note flag{forensics_artifact}"
+        return {
+            "tool": "shell",
+            "ok": True,
+            "output": output,
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"command": request["command"]},
+        }
+
+    state = initial_state("forensics-adapter")
+    state["downloaded_attachments"] = [
+        {
+            "source": "image.png",
+            "path": "/tmp/image.png",
+            "ok": True,
+            "error": None,
+        }
+    ]
+
+    result = ForensicsAdapter(tool_executor=fake_tool_executor).execute(state)
+
+    assert [command for _, command, _ in calls] == [
+        "file -b /tmp/image.png",
+        "strings -n 4 /tmp/image.png | head -200",
+    ]
+    assert all(caller == "forensics_agent" for _, _, caller in calls)
+    assert result["summary"] == "Forensics Adapter analyzed 1 downloaded attachment(s)."
+    assert result["candidate_flags"] == ["flag{forensics_artifact}"]
+    assert result["findings"][0]["agent"] == "forensics_agent"
 
 
 def test_misc_agent_attachment_results_publish_to_blackboard():
