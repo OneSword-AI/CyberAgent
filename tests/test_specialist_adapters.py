@@ -63,6 +63,9 @@ def test_default_specialist_adapters_expose_web_crypto_misc_and_forensics():
     assert {"file", "strings", "unzip_list", "flag_extract"} <= set(
         forensics_description["capabilities"]
     )
+    assert {"metadata_extract", "binwalk_scan", "pcap_tshark_summary"} <= set(
+        forensics_description["capabilities"]
+    )
 
 
 def test_specialists_can_use_replacement_adapters():
@@ -205,11 +208,71 @@ def test_forensics_adapter_reuses_basic_attachment_analysis_tools():
     assert [command for _, command, _ in calls] == [
         "file -b /tmp/image.png",
         "strings -n 4 /tmp/image.png | head -200",
+        "binwalk /tmp/image.png",
+        "exiftool /tmp/image.png",
     ]
     assert all(caller == "forensics_agent" for _, _, caller in calls)
     assert result["summary"] == "Forensics Adapter analyzed 1 downloaded attachment(s)."
     assert result["candidate_flags"] == ["flag{forensics_artifact}"]
     assert result["findings"][0]["agent"] == "forensics_agent"
+    assert [output["metadata"]["analysis"] for output in result["tool_outputs"]] == [
+        "file",
+        "strings",
+        "binwalk",
+        "metadata",
+    ]
+
+
+def test_forensics_adapter_runs_pcap_tshark_analysis():
+    calls = []
+
+    def fake_tool_executor(name: str, request: dict, *, caller: str) -> dict:
+        calls.append((name, request["command"], caller))
+        if request["command"].startswith("file "):
+            output = "pcap capture file"
+        elif "pcap_protocols" in request["command"]:
+            output = ""
+        elif request["command"].startswith("tshark "):
+            output = "HTTP GET /flag flag{pcap_trace}"
+        else:
+            output = "DECIMAL HEXADECIMAL DESCRIPTION"
+        return {
+            "tool": "shell",
+            "ok": True,
+            "output": output,
+            "error": None,
+            "exit_code": 0,
+            "metadata": {"command": request["command"]},
+        }
+
+    state = initial_state("forensics-pcap")
+    state["downloaded_attachments"] = [
+        {
+            "source": "traffic.pcap",
+            "path": "/tmp/traffic.pcap",
+            "ok": True,
+            "error": None,
+        }
+    ]
+
+    result = ForensicsAdapter(tool_executor=fake_tool_executor).execute(state)
+
+    commands = [command for _, command, _ in calls]
+    assert commands == [
+        "file -b /tmp/traffic.pcap",
+        "strings -n 4 /tmp/traffic.pcap | head -200",
+        "binwalk /tmp/traffic.pcap",
+        "tshark -r /tmp/traffic.pcap -q -z io,phs",
+        "tshark -r /tmp/traffic.pcap -T fields -e frame.number -e _ws.col.Protocol -e _ws.col.Info -c 80",
+    ]
+    assert result["candidate_flags"] == ["flag{pcap_trace}"]
+    assert result["findings"][0]["evidence"]["analyses"] == [
+        "file",
+        "strings",
+        "binwalk",
+        "pcap_summary",
+        "pcap_protocols",
+    ]
 
 
 def test_crypto_adapter_detects_encoded_flags():

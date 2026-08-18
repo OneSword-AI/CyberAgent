@@ -428,26 +428,26 @@ class AttachmentAnalysisAdapter:
         budget_state = state
         for attachment in attachments:
             path = str(attachment["path"])
-            file_output = self._run_shell(f"file -b {quote(path)}", budget_state)
+            file_output = self._run_analysis(
+                "file",
+                f"file -b {quote(path)}",
+                path,
+                budget_state,
+            )
             budget_state = _count_local_budget_use(budget_state, file_output)
-            file_output["metadata"] = {
-                **file_output.get("metadata", {}),
-                "analysis": "file",
-                "path": path,
-            }
             tool_outputs.append(file_output)
             candidate_flags = merge_candidate_flags(
                 candidate_flags,
                 extract_flags(str(file_output.get("output", "")), state.get("flag_format")),
             )
 
-            strings_output = self._run_shell(f"strings -n 4 {quote(path)} | head -200", budget_state)
+            strings_output = self._run_analysis(
+                "strings",
+                f"strings -n 4 {quote(path)} | head -200",
+                path,
+                budget_state,
+            )
             budget_state = _count_local_budget_use(budget_state, strings_output)
-            strings_output["metadata"] = {
-                **strings_output.get("metadata", {}),
-                "analysis": "strings",
-                "path": path,
-            }
             tool_outputs.append(strings_output)
             candidate_flags = merge_candidate_flags(
                 candidate_flags,
@@ -455,17 +455,29 @@ class AttachmentAnalysisAdapter:
             )
 
             if _looks_like_zip(path, file_output.get("output", "")):
-                unzip_output = self._run_shell(f"unzip -l {quote(path)}", budget_state)
+                unzip_output = self._run_analysis(
+                    "unzip_list",
+                    f"unzip -l {quote(path)}",
+                    path,
+                    budget_state,
+                )
                 budget_state = _count_local_budget_use(budget_state, unzip_output)
-                unzip_output["metadata"] = {
-                    **unzip_output.get("metadata", {}),
-                    "analysis": "unzip_list",
-                    "path": path,
-                }
                 tool_outputs.append(unzip_output)
                 candidate_flags = merge_candidate_flags(
                     candidate_flags,
                     extract_flags(str(unzip_output.get("output", "")), state.get("flag_format")),
+                )
+
+            extra_outputs, budget_state = self._extra_attachment_outputs(
+                path,
+                str(file_output.get("output", "")),
+                budget_state,
+            )
+            for output in extra_outputs:
+                tool_outputs.append(output)
+                candidate_flags = merge_candidate_flags(
+                    candidate_flags,
+                    extract_flags(str(output.get("output", "")), state.get("flag_format")),
                 )
 
             findings.append(
@@ -476,6 +488,11 @@ class AttachmentAnalysisAdapter:
                     "evidence": {
                         "path": path,
                         "file_type": file_output.get("output", "").strip(),
+                        "analyses": [
+                            output.get("metadata", {}).get("analysis")
+                            for output in tool_outputs
+                            if output.get("metadata", {}).get("path") == path
+                        ],
                     },
                 }
             )
@@ -499,11 +516,64 @@ class AttachmentAnalysisAdapter:
             caller=self.agent_name,
         )
 
+    def _run_analysis(
+        self,
+        analysis: str,
+        command: str,
+        path: str,
+        state: ChallengeState,
+    ) -> dict[str, Any]:
+        output = self._run_shell(command, state)
+        output["metadata"] = {
+            **output.get("metadata", {}),
+            "analysis": analysis,
+            "path": path,
+        }
+        return output
+
+    def _extra_attachment_outputs(
+        self,
+        path: str,
+        file_output: str,
+        state: ChallengeState,
+    ) -> tuple[list[dict[str, Any]], ChallengeState]:
+        return [], state
+
 
 class ForensicsAdapter(AttachmentAnalysisAdapter):
     name = "forensics"
     agent_name = "forensics_agent"
     domain = "Forensics"
+
+    def describe(self) -> dict[str, Any]:
+        description = super().describe()
+        description["capabilities"] = [
+            "file",
+            "strings",
+            "unzip_list",
+            "metadata_extract",
+            "binwalk_scan",
+            "pcap_tshark_summary",
+            "pcap_tshark_protocols",
+            "flag_extract",
+        ]
+        return description
+
+    def _extra_attachment_outputs(
+        self,
+        path: str,
+        file_output: str,
+        state: ChallengeState,
+    ) -> tuple[list[dict[str, Any]], ChallengeState]:
+        outputs: list[dict[str, Any]] = []
+        budget_state = state
+
+        for analysis, command in _forensics_analysis_commands(path, file_output):
+            output = self._run_analysis(analysis, command, path, budget_state)
+            outputs.append(output)
+            budget_state = _count_local_budget_use(budget_state, output)
+
+        return outputs, budget_state
 
 
 class SpecialistToolAdapterRegistry:
@@ -574,6 +644,56 @@ def _tool_output(result: ToolResult, *, caller: str) -> dict[str, Any]:
 def _looks_like_zip(path: str, file_output: str) -> bool:
     suffix = Path(path).suffix.lower()
     return suffix == ".zip" or "zip archive" in file_output.lower()
+
+
+def _forensics_analysis_commands(path: str, file_output: str) -> list[tuple[str, str]]:
+    quoted = quote(path)
+    commands = [("binwalk", f"binwalk {quoted}")]
+    if _looks_like_image(path, file_output):
+        commands.append(("metadata", f"exiftool {quoted}"))
+    if _looks_like_pcap(path, file_output):
+        commands.extend(
+            [
+                ("pcap_summary", f"tshark -r {quoted} -q -z io,phs"),
+                (
+                    "pcap_protocols",
+                    (
+                        f"tshark -r {quoted} -T fields "
+                        "-e frame.number -e _ws.col.Protocol -e _ws.col.Info -c 80"
+                    ),
+                ),
+            ]
+        )
+    return commands
+
+
+def _looks_like_image(path: str, file_output: str) -> bool:
+    suffix = Path(path).suffix.lower()
+    lowered = file_output.lower()
+    return suffix in {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".tiff",
+        ".webp",
+    } or any(token in lowered for token in ("png image", "jpeg image", "gif image", "bitmap image", "tiff image"))
+
+
+def _looks_like_pcap(path: str, file_output: str) -> bool:
+    suffix = Path(path).suffix.lower()
+    lowered = file_output.lower()
+    return suffix in {".pcap", ".pcapng", ".cap"} or any(
+        token in lowered
+        for token in (
+            "pcap capture",
+            "pcapng capture",
+            "tcpdump capture",
+            "wireshark",
+            "packet capture",
+        )
+    )
 
 
 def _collect_crypto_text(state: ChallengeState) -> str:
